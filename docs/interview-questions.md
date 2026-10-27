@@ -19,3 +19,8 @@
 1. How does a JSON body become a Python object in FastAPI?
 2. Why validate on the backend when the frontend already validates?
 3. Why `Literal["user","assistant"]` for role, and why reject "system"?
+
+## Phase 5
+1. What is CORS, who enforces it, and what is a preflight request?
+2. Why does fetch not reject on HTTP 4xx/5xx, and how do you handle that?
+3. Why not use allow_origins=["*"], and how would you configure this for production?
