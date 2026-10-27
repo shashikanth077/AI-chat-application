@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Chat App: Learning Guide</title>
+<style>
+  :root {
+    --bg: #f5f6fa; --surface: #ffffff; --text: #1d2330; --muted: #5b6474;
+    --line: #e2e6ee; --accent: #2563eb; --accent-soft: #e8efff;
+    --react: #0ea5c6; --api: #7c3aed; --ai: #16a34a; --warn: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1420; --surface: #171e2d; --text: #e6e9f0; --muted: #9aa4b5;
+      --line: #2a3347; --accent: #6ea8ff; --accent-soft: #1d2a47;
+      --react: #38c8e6; --api: #a78bfa; --ai: #4ade80; --warn: #fbbf24;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1420; --surface: #171e2d; --text: #e6e9f0; --muted: #9aa4b5;
+    --line: #2a3347; --accent: #6ea8ff; --accent-soft: #1d2a47;
+    --react: #38c8e6; --api: #a78bfa; --ai: #4ade80; --warn: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  header.top { position: sticky; top: 0; z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .top-inner { max-width: 1100px; margin: 0 auto; padding: 12px 16px; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .top h1 { font-size: 1.05rem; margin: 0; }
+  nav.tabs { display: flex; gap: 6px; overflow-x: auto; max-width: 100%; }
+  nav.tabs button { white-space: nowrap; }
+  button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--text); padding: 6px 12px; border-radius: 8px; }
+  button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 80px; }
+  section.panel { display: none; }
+  section.panel.active { display: block; }
+  h2 { font-size: 1.5rem; margin: 0 0 6px; }
+  .lead { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+  .card h3 { margin: 0 0 8px; font-size: 1.05rem; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88em; }
+  code { background: var(--accent-soft); padding: 1px 6px; border-radius: 5px; }
+  pre { background: #0b1020; color: #e6e9f0; padding: 14px; border-radius: 10px; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; }
+  .pill { display: inline-block; font-size: 0.75rem; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); margin-right: 6px; }
+  .why { border-left: 3px solid var(--warn); padding-left: 12px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  svg text { fill: var(--text); font-size: 13px; font-family: system-ui, sans-serif; }
+  svg .label-muted { fill: var(--muted); font-size: 11px; }
+
+  /* Interactive data-flow */
+  .flow-steps { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .flow-steps button.active { background: var(--accent); }
+  .flow-detail { min-height: 110px; }
+  .flow-detail h3 span { font-weight: 400; color: var(--muted); }
+
+  /* Quiz */
+  .q { border-bottom: 1px solid var(--line); padding: 14px 0; }
+  .q:last-child { border-bottom: 0; }
+  .answer { display: none; margin-top: 8px; padding: 10px 12px; background: var(--accent-soft); border-radius: 8px; font-size: 0.95rem; }
+  .answer.show { display: block; }
+  .progress { height: 8px; background: var(--line); border-radius: 999px; overflow: hidden; margin: 8px 0 16px; }
+  .progress > div { height: 100%; width: 0; background: var(--ai); transition: width .3s; }
+
+  .toggle-theme { font-size: 0.85rem; }
+  footer { color: var(--muted); font-size: 0.85rem; text-align: center; margin-top: 40px; }
+  @media (max-width: 600px) { h2 { font-size: 1.25rem; } main { padding: 16px 12px 60px; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <h1>AI Chat App: Learning Guide</h1>
+    <nav class="tabs" id="tabs" aria-label="Sections"></nav>
+    <button class="toggle-theme" id="theme" aria-label="Toggle dark mode">Dark mode</button>
+  </div>
+</header>
+
+<main>
+
+<!-- OVERVIEW -->
+<section class="panel" id="overview" data-title="Overview">
+  <h2>How the app is built</h2>
+  <p class="lead">A React chat UI talks to a FastAPI backend, which validates the input and calls an AI model. The browser never sees the API key.</p>
+
+  <div class="card">
+    <h3>System architecture</h3>
+    <svg viewBox="0 0 960 230" width="100%" role="img" aria-label="Architecture diagram">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#8a94a6"/>
+        </marker>
+      </defs>
+      <rect x="10" y="70" width="200" height="90" rx="12" fill="none" stroke="var(--react)" stroke-width="2"/>
+      <text x="110" y="100" text-anchor="middle" font-weight="700">React + TypeScript</text>
+      <text x="110" y="122" text-anchor="middle" class="label-muted">Browser · localhost:5173</text>
+      <text x="110" y="142" text-anchor="middle" class="label-muted">UI state, fetch</text>
+
+      <rect x="290" y="70" width="230" height="90" rx="12" fill="none" stroke="var(--api)" stroke-width="2"/>
+      <text x="405" y="100" text-anchor="middle" font-weight="700">FastAPI + Pydantic</text>
+      <text x="405" y="122" text-anchor="middle" class="label-muted">Server · localhost:8000</text>
+      <text x="405" y="142" text-anchor="middle" class="label-muted">validate, CORS, map errors</text>
+
+      <rect x="600" y="70" width="170" height="90" rx="12" fill="none" stroke="var(--ai)" stroke-width="2"/>
+      <text x="685" y="100" text-anchor="middle" font-weight="700">OpenAI SDK</text>
+      <text x="685" y="122" text-anchor="middle" class="label-muted">Chat Completions</text>
+      <text x="685" y="142" text-anchor="middle" class="label-muted">key from .env</text>
+
+      <rect x="805" y="70" width="145" height="90" rx="12" fill="none" stroke="var(--muted)" stroke-width="2" stroke-dasharray="5 4"/>
+      <text x="877" y="105" text-anchor="middle" font-weight="700">AI model</text>
+      <text x="877" y="127" text-anchor="middle" class="label-muted">OpenAI or Groq</text>
+
+      <line x1="210" y1="105" x2="288" y2="105" stroke="#8a94a6" stroke-width="2" marker-end="url(#arr)"/>
+      <line x1="520" y1="105" x2="598" y2="105" stroke="#8a94a6" stroke-width="2" marker-end="url(#arr)"/>
+      <line x1="770" y1="105" x2="803" y2="105" stroke="#8a94a6" stroke-width="2" marker-end="url(#arr)"/>
+      <text x="249" y="92" text-anchor="middle" class="label-muted">JSON POST</text>
+      <text x="559" y="92" text-anchor="middle" class="label-muted">messages</text>
+
+      <line x1="803" y1="185" x2="210" y2="185" stroke="#8a94a6" stroke-width="2" stroke-dasharray="4 4" marker-end="url(#arr)"/>
+      <text x="500" y="205" text-anchor="middle" class="label-muted">reply text ← JSON {"reply"} ← the browser renders it</text>
+    </svg>
+    <p class="why">Key idea: the frontend never calls the AI directly. The key and the rules live on the server.</p>
+  </div>
+
+  <div class="grid">
+    <div class="card"><h3>Frontend</h3><p>React components render state. <code>App.tsx</code> owns the state; <code>chatService.ts</code> owns the network call.</p></div>
+    <div class="card"><h3>Backend</h3><p><code>main.py</code> handles HTTP. <code>schemas.py</code> defines the rules. <code>openai_service.py</code> talks to the model.</p></div>
+    <div class="card"><h3>Contract</h3><p>One request shape and one response shape connect the two. Changing one means changing the other.</p></div>
+  </div>
+</section>
+
+<!-- DATA FLOW -->
+<section class="panel" id="flow" data-title="Data flow">
+  <h2>Follow one message</h2>
+  <p class="lead">Click each step to see what happens to your message, from the keyboard to the screen and back.</p>
+  <div class="card">
+    <div class="flow-steps" id="flowSteps" role="tablist"></div>
+    <div class="flow-detail" id="flowDetail" aria-live="polite"></div>
+  </div>
+</section>
+
+<!-- PHASES -->
+<section class="panel" id="phases" data-title="Phases">
+  <h2>Nine phases, each runnable</h2>
+  <p class="lead">Each phase added one layer and was tested before the next. Expand a phase to see what it added and why.</p>
+  <div id="phaseList"></div>
+</section>
+
+<!-- BACKEND -->
+<section class="panel" id="backend" data-title="Backend">
+  <h2>Backend: FastAPI and Pydantic</h2>
+  <p class="lead">Python concepts explained against the JavaScript you already know.</p>
+  <div class="grid">
+    <div class="card"><h3>Decorators</h3><p><code>@app.post("/chat")</code> registers a function as a route, like <code>app.post('/chat', handler)</code> in Express.</p></div>
+    <div class="card"><h3>Type hints drive behavior</h3><p>The parameter <code>request: ChatRequest</code> makes FastAPI parse JSON, validate it, and return 422 on failure. The handler only runs on valid data.</p></div>
+    <div class="card"><h3><code>def</code> vs <code>async def</code></h3><p>The OpenAI call is synchronous, so a plain <code>def</code> runs in a thread pool and doesn't block other requests.</p></div>
+    <div class="card"><h3>Environment variables</h3><p><code>load_dotenv()</code> reads <code>backend/.env</code>. <code>os.getenv()</code> returns <code>None</code> when a variable is missing.</p></div>
+  </div>
+  <div class="card">
+    <h3>Validation rules</h3>
+<pre>class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]          # no "system" from clients
+    content: str = Field(min_length=1, max_length=4000)
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage] = Field(min_length=1, max_length=20)
+
+    @model_validator(mode="after")              # cross-field rule
+    def last_message_is_user(self): ...</pre>
+  </div>
+  <div class="card">
+    <h3>Error mapping</h3>
+    <table>
+      <tr><th>Cause</th><th>HTTP</th><th>What the user sees</th></tr>
+      <tr><td>Bad request body</td><td>422</td><td>Validation message (never reaches the AI)</td></tr>
+      <tr><td>Provider timeout</td><td>504</td><td>"The AI took too long…"</td></tr>
+      <tr><td>Can't reach provider</td><td>502</td><td>"Could not reach the AI service…"</td></tr>
+      <tr><td>Rate limited</td><td>429</td><td>"Too many requests…"</td></tr>
+      <tr><td>Bad key or missing config</td><td>500</td><td>"The server is not configured correctly."</td></tr>
+      <tr><td>Empty model reply</td><td>502</td><td>"The AI returned an empty response."</td></tr>
+    </table>
+    <p class="why">Details go to the server log. The browser gets a safe message, so internal details and secrets never leak.</p>
+  </div>
+</section>
+
+<!-- FRONTEND -->
+<section class="panel" id="frontend" data-title="Frontend">
+  <h2>Frontend: React and TypeScript</h2>
+  <p class="lead">Small components, one owner of state, and a typed service layer.</p>
+  <div class="card">
+    <svg viewBox="0 0 960 260" width="100%" role="img" aria-label="Component tree">
+      <rect x="380" y="10" width="200" height="50" rx="10" fill="none" stroke="var(--accent)" stroke-width="2"/>
+      <text x="480" y="41" text-anchor="middle" font-weight="700">App (state)</text>
+      <rect x="170" y="110" width="220" height="50" rx="10" fill="none" stroke="var(--react)" stroke-width="2"/>
+      <text x="280" y="141" text-anchor="middle">MessageList</text>
+      <rect x="570" y="110" width="220" height="50" rx="10" fill="none" stroke="var(--react)" stroke-width="2"/>
+      <text x="680" y="141" text-anchor="middle">ChatInput</text>
+      <rect x="170" y="200" width="220" height="44" rx="10" fill="none" stroke="var(--react)" stroke-width="2"/>
+      <text x="280" y="227" text-anchor="middle">MessageBubble (×n)</text>
+      <rect x="570" y="200" width="220" height="44" rx="10" fill="none" stroke="var(--api)" stroke-width="2"/>
+      <text x="680" y="227" text-anchor="middle">chatService (fetch)</text>
+      <line x1="440" y1="60" x2="300" y2="108" stroke="#8a94a6" stroke-width="2"/>
+      <line x1="520" y1="60" x2="660" y2="108" stroke="#8a94a6" stroke-width="2"/>
+      <line x1="280" y1="160" x2="280" y2="198" stroke="#8a94a6" stroke-width="2"/>
+      <line x1="680" y1="160" x2="680" y2="198" stroke="#8a94a6" stroke-width="2"/>
+      <text x="740" y="100" class="label-muted">props: onSend, disabled</text>
+      <text x="60" y="100" class="label-muted">props: messages, loading, error, onRetry</text>
+    </svg>
+  </div>
+  <div class="grid">
+    <div class="card"><h3>Why the new array is built first</h3><p><code>setMessages</code> is asynchronous. Reading <code>messages</code> after calling it returns the old value, so the code builds <code>history</code> before the <code>await</code>.</p></div>
+    <div class="card"><h3>Enter vs Shift+Enter</h3><p><code>onKeyDown</code> calls <code>preventDefault()</code> on a plain Enter and sends. Shift+Enter falls through and inserts a newline.</p></div>
+    <div class="card"><h3>Retry without duplicates</h3><p>The user message stays in state after a failure, so Retry re-sends the same history instead of adding a new message.</p></div>
+    <div class="card"><h3><code>fetch</code> doesn't reject on 4xx/5xx</h3><p>Only network failures reject. The code checks <code>response.ok</code> and reads FastAPI's <code>detail</code> field.</p></div>
+  </div>
+</section>
+
+<!-- CORS / SECURITY -->
+<section class="panel" id="security" data-title="CORS and security">
+  <h2>CORS and security</h2>
+  <p class="lead">Browsers enforce CORS. curl and Swagger ignore it, which is why the same endpoint can work in one and fail in the other.</p>
+  <div class="card">
+    <svg viewBox="0 0 960 200" width="100%" role="img" aria-label="CORS preflight sequence">
+      <line x1="120" y1="30" x2="120" y2="190" stroke="var(--react)" stroke-width="2"/>
+      <line x1="840" y1="30" x2="840" y2="190" stroke="var(--api)" stroke-width="2"/>
+      <text x="120" y="20" text-anchor="middle" font-weight="700">Browser (localhost:5173)</text>
+      <text x="840" y="20" text-anchor="middle" font-weight="700">FastAPI (localhost:8000)</text>
+      <line x1="120" y1="70" x2="840" y2="70" stroke="#8a94a6" stroke-width="2" marker-end="url(#arr2)"/>
+      <text x="480" y="62" text-anchor="middle" class="label-muted">1. OPTIONS /chat (preflight, "may I POST JSON?")</text>
+      <line x1="840" y1="110" x2="120" y2="110" stroke="var(--ai)" stroke-width="2" marker-end="url(#arr2)"/>
+      <text x="480" y="102" text-anchor="middle" class="label-muted">2. allow-origin: localhost:5173 (CORSMiddleware)</text>
+      <line x1="120" y1="150" x2="840" y2="150" stroke="#8a94a6" stroke-width="2" marker-end="url(#arr2)"/>
+      <text x="480" y="142" text-anchor="middle" class="label-muted">3. POST /chat, runs only if step 2 allowed it</text>
+      <defs><marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8a94a6"/></marker></defs>
+    </svg>
+  </div>
+  <div class="grid">
+    <div class="card"><h3>Allow only known origins</h3><p><code>allow_origins=["*"]</code> lets any website call your API from a visitor's browser. Use an exact list.</p></div>
+    <div class="card"><h3>Secrets</h3><p>Only the backend reads <code>OPENAI_API_KEY</code>. Vite exposes only variables prefixed with <code>VITE_</code>, and those are public.</p></div>
+    <div class="card"><h3>Validation is the real boundary</h3><p>Frontend limits help honest users. Anyone can bypass them, so the Pydantic rules are what protect your cost.</p></div>
+  </div>
+</section>
+
+<!-- TESTING -->
+<section class="panel" id="testing" data-title="Testing">
+  <h2>Testing and troubleshooting</h2>
+  <p class="lead">Mock the network edge, not your own logic.</p>
+  <div class="grid">
+    <div class="card"><h3>Automated</h3><p><code>pytest</code> runs 18 tests with the OpenAI client replaced by a mock. They're offline, free and deterministic.</p><pre>cd backend
+pytest -q</pre></div>
+    <div class="card"><h3>Manual</h3><p>Run the checklist in <code>docs/testing.md</code>, with a real key: context follow-up, stopped-backend retry, bad key, long input.</p></div>
+  </div>
+  <div class="card">
+    <h3>Troubleshooting map</h3>
+    <table>
+      <tr><th>Symptom</th><th>First check</th></tr>
+      <tr><td>blocked by CORS policy</td><td>Exact origin in <code>allow_origins</code></td></tr>
+      <tr><td>Cannot reach the server</td><td>Backend running? Open <code>/health</code></td></tr>
+      <tr><td>"not configured correctly"</td><td>Server log line; <code>.env</code> location; <code>OPENAI_BASE_URL</code> for Groq</td></tr>
+      <tr><td>422</td><td>Response <code>detail</code> in devtools → Network</td></tr>
+      <tr><td>Works in Swagger, fails in browser</td><td>CORS, or a header/body difference in devtools</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- QUIZ -->
+<section class="panel" id="quiz" data-title="Quiz">
+  <h2>Self-check quiz</h2>
+  <p class="lead">Try answering out loud, then reveal. The full interview questions with answers are in the PDF guide.</p>
+  <div class="card">
+    <div class="progress"><div id="quizBar"></div></div>
+    <div id="quizList"></div>
+  </div>
+</section>
+
+</main>
+<footer>Built step by step for learning. Source: <code>README.md</code>, <code>docs/</code>.</footer>
+
+<script>
+  // ---- Tabs ----
+  const panels = [...document.querySelectorAll('section.panel')];
+  const tabs = document.getElementById('tabs');
+  function show(id) {
+    panels.forEach(p => p.classList.toggle('active', p.id === id));
+    [...tabs.children].forEach(b => b.classList.toggle('active', b.dataset.id === id));
+    history.replaceState(null, '', '#' + id);
+  }
+  panels.forEach(p => {
+    const b = document.createElement('button');
+    b.textContent = p.dataset.title;
+    b.dataset.id = p.id;
+    b.onclick = () => show(p.id);
+    tabs.appendChild(b);
+  });
+  show(location.hash.slice(1) || 'overview');
+
+  // ---- Theme ----
+  const themeBtn = document.getElementById('theme');
+  let theme = null;
+  try { theme = localStorage.getItem('theme'); } catch (e) {}
+  function applyTheme() {
+    const dark = theme ? theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    themeBtn.textContent = dark ? 'Light mode' : 'Dark mode';
+  }
+  themeBtn.onclick = () => {
+    const isDark = document.documentElement.dataset.theme === 'dark';
+    theme = isDark ? 'light' : 'dark';
+    try { localStorage.setItem('theme', theme); } catch (e) {}
+    applyTheme();
+  };
+  applyTheme();
+
+  // ---- Interactive data flow ----
+  const steps = [
+    { t: 'Type & press Enter', where: 'ChatInput', d: 'The keydown handler sees a plain Enter, calls preventDefault() so no newline is added, and calls submit(). Empty text is blocked by canSend.' },
+    { t: 'Build the history', where: 'App.handleSend', d: 'A new user message gets a UUID. history = [...messages, userMsg] is built before any await, because setState is asynchronous and would hand back the old array.' },
+    { t: 'Trim and serialize', where: 'chatService.sendChat', d: 'history.slice(-20) keeps the cost bounded. map() drops the client-only id field, then JSON.stringify builds the body.' },
+    { t: 'HTTP request', where: 'fetch → FastAPI', d: 'POST /chat with Content-Type: application/json. The browser first sends an OPTIONS preflight; CORSMiddleware answers it with the allowed origin.' },
+    { t: 'Validate', where: 'Pydantic (schemas.py)', d: 'The JSON becomes a ChatRequest. Bad role, blank content, too many messages or a non-user last message gives 422, and the handler never runs.' },
+    { t: 'Call the model', where: 'openai_service.generate_reply', d: 'The server prepends the system prompt, sends the messages to the model via the SDK, and caps the output at 800 tokens. Timeouts and bad keys are caught and classified.' },
+    { t: 'Return JSON', where: 'main.chat → ChatResponse', d: 'response_model filters the output to {"reply": "..."}. FastAPI serializes it to JSON.' },
+    { t: 'Render', where: 'App → MessageList', d: 'setMessages appends the assistant bubble. React re-renders, and a useEffect scrolls the bottom sentinel into view. On error, the red box with Retry appears instead.' }
+  ];
+  const stepBox = document.getElementById('flowSteps');
+  const detail = document.getElementById('flowDetail');
+  function showStep(i) {
+    [...stepBox.children].forEach((b, j) => {
+      b.classList.toggle('active', i === j);
+      b.setAttribute('aria-selected', i === j);
+    });
+    detail.innerHTML = `<h3>${i + 1}. ${steps[i].t} <span>· ${steps[i].where}</span></h3><p>${steps[i].d}</p>`;
+  }
+  steps.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.textContent = `${i + 1}. ${s.t}`;
+    b.setAttribute('role', 'tab');
+    b.onclick = () => showStep(i);
+    stepBox.appendChild(b);
+  });
+  showStep(0);
+
+  // ---- Phases ----
+  const phases = [
+    { n: 1, t: 'Project setup', what: 'Vite React-TS frontend, FastAPI backend, venv, .gitignore, .env.example.', why: 'Two programs that talk over HTTP, so the key stays on the server.' },
+    { n: 2, t: 'React UI with mocks', what: 'Message list, bubbles, input, typing indicator, auto-scroll, responsive CSS.', why: 'Get the UI right against a fake before any network code exists.' },
+    { n: 3, t: 'Hardcoded endpoint', what: 'POST /chat returns a fixed reply.', why: 'Confirm routing and methods (405 vs 404) before adding logic.' },
+    { n: 4, t: 'Pydantic validation', what: 'ChatRequest/ChatMessage models, limits, role rules, cross-field check.', why: 'Untrusted input is rejected before it reaches the model or costs money.' },
+    { n: 5, t: 'Fetch + CORS', what: 'Frontend calls the real API; backend allows only localhost:5173.', why: 'Browsers block cross-origin calls unless the server opts in.' },
+    { n: 6, t: 'OpenAI SDK', what: 'Service layer, system prompt, env-based key/model, error classification.', why: 'Map provider failures to safe, specific HTTP errors.' },
+    { n: 7, t: 'History, limits, retry', what: 'Trim to 20 messages, live counter, Retry button.', why: 'Keep long conversations working and the UI recoverable.' },
+    { n: 8, t: 'Tests & provider flexibility', what: 'pytest suite (18 tests); configurable base URL for Groq and other providers.', why: 'Regressions get caught offline, and the provider can change without a rewrite.' },
+    { n: 9, t: 'README & docs', what: 'Setup, API reference, architecture, security notes, roadmap.', why: 'Makes the project explainable and reproducible.' }
+  ];
+  document.getElementById('phaseList').innerHTML = phases.map(p => `
+    <details class="card">
+      <summary><span class="pill">Phase ${p.n}</span><strong>${p.t}</strong></summary>
+      <p><strong>What:</strong> ${p.what}</p>
+      <p class="why"><strong>Why:</strong> ${p.why}</p>
+    </details>`).join('');
+
+  // ---- Quiz ----
+  const quiz = [
+    ['Why must the OpenAI call happen on the backend?', 'The key would be exposed in browser code and network traffic. Anyone could copy it and run up your bill.'],
+    ['What does Pydantic do when a request is invalid?', 'FastAPI returns 422 with the field-level errors, and the handler never runs.'],
+    ['Why does a plain fetch not throw on a 500?', 'fetch only rejects on network failure. Check response.ok and read the body yourself.'],
+    ['Why is the new messages array built before the await?', 'setState is asynchronous, so reading messages afterwards gives the stale array.'],
+    ['Why reject role "system" from the client?', 'It would let a client override the server-owned system prompt.'],
+    ['What is a CORS preflight?', 'An OPTIONS request the browser sends first to ask the server whether the real cross-origin request is allowed.'],
+    ['Why trim history to 20 messages?', 'It bounds token cost and keeps requests inside the backend limit, at the price of forgetting older turns.'],
+    ['What should a unit test mock?', 'The network boundary (the SDK client). Your own validation and error mapping should run for real.']
+  ];
+  const quizList = document.getElementById('quizList');
+  const bar = document.getElementById('quizBar');
+  const revealed = new Set();
+  quizList.innerHTML = quiz.map(([q, a], i) => `
+    <div class="q">
+      <strong>${i + 1}. ${q}</strong>
+      <div><button data-i="${i}">Reveal answer</button></div>
+      <div class="answer" id="a${i}">${a}</div>
+    </div>`).join('');
+  quizList.addEventListener('click', e => {
+    const i = e.target.dataset.i;
+    if (i === undefined) return;
+    document.getElementById('a' + i).classList.add('show');
+    e.target.remove();
+    revealed.add(i);
+    bar.style.width = (revealed.size / quiz.length * 100) + '%';
+  });
+</script>
+</body>
+</html>
