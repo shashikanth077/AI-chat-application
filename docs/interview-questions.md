@@ -24,3 +24,8 @@
 1. What is CORS, who enforces it, and what is a preflight request?
 2. Why does fetch not reject on HTTP 4xx/5xx, and how do you handle that?
 3. Why not use allow_origins=["*"], and how would you configure this for production?
+
+## Phase 6
+1. Why keep the API key on the server, and how do environment variables / .env / .gitignore work together?
+2. What is a system prompt (instructions) versus user/assistant messages, and why must the server own it?
+3. How do you handle OpenAI failures (timeout, rate limit, auth) without leaking internals, and which HTTP status codes do you map them to?

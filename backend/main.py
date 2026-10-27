@@ -1,7 +1,16 @@
-from fastapi import FastAPI
+import logging
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from schemas import ChatRequest, ChatResponse
+# Must run before the service reads os.getenv(). Loads backend/.env if present.
+load_dotenv()
+
+from schemas import ChatRequest, ChatResponse  # noqa: E402
+from services.openai_service import ChatServiceError, generate_reply  # noqa: E402
+
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(title="AI Chat API")
 
@@ -21,12 +30,10 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-# FastAPI sees the `ChatRequest` type hint on `request`, so it reads the JSON
-# body, validates it, and only then calls this function. Invalid input never
-# reaches our code: FastAPI replies 422 automatically.
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest) -> ChatResponse:
-    last = request.messages[-1].content
-    return ChatResponse(
-        reply=f"(hardcoded) Got {len(request.messages)} message(s). Last: {last!r}"
-    )
+    try:
+        reply = generate_reply(request.messages)
+    except ChatServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message)
+    return ChatResponse(reply=reply)
