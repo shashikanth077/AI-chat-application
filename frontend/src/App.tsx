@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ChatMessage } from './types/chat';
-import { sendChat } from './services/chatService';
+import { isAbortError, streamChat } from './services/chatService';
 import { MessageList } from './components/MessageList';
 import { ChatInput } from './components/ChatInput';
 import './App.css';
@@ -10,17 +10,44 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Shared by send and retry: ask the API for a reply to `history`.
+  // Lets the Stop button cancel the in-flight request.
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  // Shared by send and retry: stream a reply to `history` into the list.
   const requestReply = async (history: ChatMessage[]) => {
     setError(null);
     setLoading(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const replyId = crypto.randomUUID();
+    let started = false;
+
     try {
-      const reply = await sendChat(history);
-      setMessages([...history, { id: crypto.randomUUID(), role: 'assistant', content: reply }]);
+      await streamChat(
+        history,
+        (delta) => {
+          if (!started) {
+            // The assistant bubble appears with the first token.
+            started = true;
+            setMessages([...history, { id: replyId, role: 'assistant', content: delta }]);
+          } else {
+            // Functional update: many deltas can arrive before React re-renders.
+            setMessages((prev) =>
+              prev.map((m) => (m.id === replyId ? { ...m, content: m.content + delta } : m)),
+            );
+          }
+        },
+        controller.signal,
+      );
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
+      // Stop is a user choice, not a failure. Any partial text is kept.
+      if (!isAbortError(e)) {
+        setError(e instanceof Error ? e.message : 'Something went wrong.');
+      }
     } finally {
       setLoading(false);
+      abortRef.current = null;
     }
   };
 
@@ -33,9 +60,17 @@ function App() {
     void requestReply(history);
   };
 
-  // After a failure the user message is still in `messages`, so retrying
-  // just re-sends the same history without adding a duplicate.
-  const handleRetry = () => void requestReply(messages);
+  // Retry regenerates the answer to the last user message. If the stream failed
+  // midway, a partial assistant bubble exists, so cut back to that user message.
+  const handleRetry = () => {
+    const lastUser = messages.map((m) => m.role).lastIndexOf('user');
+    if (lastUser === -1) return;
+    const history = messages.slice(0, lastUser + 1);
+    setMessages(history);
+    void requestReply(history);
+  };
+
+  const handleStop = () => abortRef.current?.abort();
 
   const handleClear = () => {
     setMessages([]);
@@ -51,7 +86,7 @@ function App() {
         </button>
       </header>
       <MessageList messages={messages} loading={loading} error={error} onRetry={handleRetry} />
-      <ChatInput disabled={loading} onSend={handleSend} />
+      <ChatInput disabled={loading} onSend={handleSend} onStop={handleStop} />
     </div>
   );
 }

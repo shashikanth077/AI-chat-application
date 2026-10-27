@@ -101,3 +101,5 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .error { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .error button.secondary { color: var(--danger); border-color: var(--danger); flex-shrink: 0; }
+
+button.stop { background: var(--danger); }

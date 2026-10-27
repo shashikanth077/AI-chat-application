@@ -6,6 +6,7 @@ OpenAI-compatible chat model (OpenAI, or Groq via a base URL). Built as a learni
 ## Features
 - Chat UI with user/assistant bubbles, auto-scroll, and a typing indicator
 - Enter to send, Shift+Enter for a new line
+- Streaming replies: text appears as it is generated, with a Stop button
 - Conversation context: follow-up questions work (the last 20 messages are sent)
 - Clear Chat, error messages with a Retry button
 - Input limits (4000 characters per message) shown with a live counter
@@ -108,6 +109,25 @@ Response `200`:
 
 Error bodies are `{"detail": "..."}`. Upstream error text is never returned to the client.
 
+### `POST /chat/stream`
+Same request body as `/chat`; the reply arrives as Server-Sent Events (`text/event-stream`):
+```bash
+curl -N -X POST http://localhost:8000/chat/stream \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Say hi in five words"}]}'
+```
+```
+data: {"delta": "Hello "}
+
+data: {"delta": "there!"}
+
+event: done
+data: {}
+```
+- Errors **before** the first token (422, 429, 500, 502, 504) are normal HTTP errors, exactly as for `/chat`.
+- An error **after** streaming has started can't change the 200 status, so it arrives as `event: error` with `data: {"detail": "..."}`.
+- A stream that ends without a `done` event means the connection was cut; the client treats it as an interrupted response.
+
 Interactive docs: `http://localhost:8000/docs`.
 
 ## Testing
@@ -117,7 +137,7 @@ source .venv/bin/activate
 pip install -r requirements-dev.txt
 pytest -q
 ```
-The 18 tests cover validation, error mapping, safe error messages, CORS, and that invalid input never reaches the model. See `docs/testing.md` for the manual end-to-end checklist.
+The 25 tests cover validation, error mapping, safe error messages, CORS, streaming (including mid-stream failure and cancellation), and that invalid input never reaches the model. See `docs/testing.md` for the manual end-to-end checklist.
 
 ## Configuration and limits
 | Setting | Where | Default |
@@ -138,8 +158,7 @@ Keep the two limit files in sync when changing them.
 
 ## Roadmap
 - Retrieval-augmented generation (RAG) over user documents (planned next phase)
-- Streaming responses
-- Persistent conversations
+- Persistent conversations (SQLite, planned next)
 
 ## Learning guide
 - `docs/AI-Chat-Learning-Guide.html`: interactive walkthrough of how the app was built

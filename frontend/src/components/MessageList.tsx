@@ -12,10 +12,15 @@ interface Props {
 export function MessageList({ messages, loading, error, onRetry }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to the sentinel div whenever content below changes.
+  // Scroll to the sentinel div whenever content below changes. While tokens
+  // are streaming, smooth scrolling would lag behind, so jump instead.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    bottomRef.current?.scrollIntoView({ behavior: loading ? 'auto' : 'smooth' });
   }, [messages, loading, error]);
+
+  // Dots only until the first token arrives; after that the growing
+  // assistant bubble is the progress indicator.
+  const waiting = loading && messages[messages.length - 1]?.role !== 'assistant';
 
   return (
     <div className="message-list" role="log" aria-live="polite">
@@ -25,7 +30,7 @@ export function MessageList({ messages, loading, error, onRetry }: Props) {
       {messages.map((m) => (
         <MessageBubble key={m.id} message={m} />
       ))}
-      {loading && (
+      {waiting && (
         <div className="bubble-row assistant">
           <div className="bubble assistant typing" aria-label="Assistant is typing">
             <span /><span /><span />
