@@ -30,3 +30,21 @@ The OpenAI client is mocked, so tests are free, offline and deterministic.
 | 429 | Rate limit / quota | Wait, or check the provider dashboard |
 | 422 | Request violates the schema | Open devtools -> Network -> response `detail` |
 | `ModuleNotFoundError` | venv not active or wrong cwd | `source .venv/bin/activate`; run from `backend/` |
+
+## Persistence checklist (Phase 11)
+1. Send "My name is Sam", then "What is my name?": the second reply uses the first (context is loaded from the database).
+2. Refresh the page: the same conversation reopens with both messages. The sidebar shows it, highlighted.
+3. Stop and restart Uvicorn, then refresh: the chats are still there (`backend/chat.db`).
+4. **+ New chat**, send a message: a second entry appears at the top of the sidebar. Click the first to switch back.
+5. Press **Stop** mid-answer, then refresh: the partial answer is still saved.
+6. Stop the provider/network mid-answer: you get an error and **Retry**; after Retry, `GET /conversations/{id}` shows one user message, not two.
+7. **Clear Chat** (or the × in the sidebar) deletes the chat after a confirmation.
+8. Narrow the window below 700px: the sidebar becomes a drawer opened by the ☰ button.
+9. Inspect the data directly: `sqlite3 backend/chat.db "select id, title from conversations;"`
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `sqlite3.OperationalError: unable to open database file` | The folder isn't writable or `DATABASE_URL` is wrong | Check the path |
+| `database is locked` | Two processes writing at once | Run one backend instance; SQLite handles concurrent reads but serialises writes |
+| Old chats missing after changing `DATABASE_URL` | You are looking at a different database file | Point back to the original URL |
+| Table errors after changing a model | `create_all` never alters existing tables | Delete `chat.db` in development, or adopt Alembic migrations |

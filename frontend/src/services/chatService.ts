@@ -1,25 +1,4 @@
-import { MAX_HISTORY_MESSAGES } from '../constants';
-import type { ChatMessage } from '../types/chat';
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
-
-// FastAPI returns 422 as { detail: [{ msg, loc, ... }] } and other errors as
-// { detail: "text" }. Turn either shape into one readable string.
-function extractError(body: unknown, status: number): string {
-  if (body && typeof body === 'object' && 'detail' in body) {
-    const detail = (body as { detail: unknown }).detail;
-    if (typeof detail === 'string') return detail;
-    if (Array.isArray(detail) && detail.length > 0) {
-      const first = detail[0] as { msg?: string };
-      if (first.msg) return `Invalid request: ${first.msg}`;
-    }
-  }
-  return `Request failed (HTTP ${status}).`;
-}
-
-export function isAbortError(e: unknown): boolean {
-  return e instanceof DOMException && e.name === 'AbortError';
-}
+import { fetchOrThrow } from './http';
 
 interface StreamState {
   finished: boolean;
@@ -42,38 +21,28 @@ function handleFrame(frame: string, onDelta: (text: string) => void, state: Stre
 }
 
 /**
- * Sends the conversation and calls `onDelta` with each piece of text as it
- * arrives. Resolves when the stream completes; rejects on failure, or with an
- * AbortError when `signal` is aborted (the Stop button).
+ * Sends one new user message to a stored conversation and calls `onDelta` with
+ * each piece of the reply as it arrives. The server already has the history,
+ * so only the new text goes over the wire. Resolves when the stream completes;
+ * rejects on failure, or with an AbortError when `signal` is aborted (Stop).
+ *
+ * `messageId` identifies this user message. Sending the same id again is a
+ * retry: the server won't store the message twice.
  */
-export async function streamChat(
-  history: ChatMessage[],
+export async function streamMessage(
+  conversationId: string,
+  messageId: string,
+  content: string,
   onDelta: (text: string) => void,
   signal: AbortSignal,
 ): Promise<void> {
-  let response: Response;
-  try {
-    response = await fetch(`${API_URL}/chat/stream`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // The backend rejects >20 messages, and every message costs tokens,
-      // so send only the most recent window. Drop the client-side `id`.
-      body: JSON.stringify({
-        messages: history.slice(-MAX_HISTORY_MESSAGES).map(({ role, content }) => ({ role, content })),
-      }),
-      signal,
-    });
-  } catch (e) {
-    if (isAbortError(e)) throw e;
-    // fetch only rejects on network-level failures (server down, CORS block).
-    throw new Error('Cannot reach the server. Is the backend running?');
-  }
-
   // Errors before the first token arrive as ordinary HTTP errors with JSON.
-  if (!response.ok) {
-    const body: unknown = await response.json().catch(() => null);
-    throw new Error(extractError(body, response.status));
-  }
+  const response = await fetchOrThrow(`/conversations/${conversationId}/messages/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, client_message_id: messageId }),
+    signal,
+  });
   if (!response.body) throw new Error('The server sent no response body.');
 
   const reader = response.body.getReader();
