@@ -34,3 +34,8 @@
 1. Why trim conversation history before sending, and what are the trade-offs (context loss vs. cost/limits)?
 2. Why does the chat UI keep the user message after a failed request, and how does Retry avoid duplicates?
 3. Why must input limits exist on both frontend and backend, and which one is the real security boundary?
+
+## Phase 8
+1. How do you unit-test code that calls an external API, and what should and should not be mocked?
+2. Why use the Chat Completions format with a configurable base URL, and what does that buy you?
+3. How would you debug a request that works in Swagger but fails in the browser?

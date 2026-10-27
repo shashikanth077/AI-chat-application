@@ -45,7 +45,14 @@ def _get_client() -> OpenAI:
         if not api_key:
             logger.error("OPENAI_API_KEY is not set")
             raise ChatServiceError(500, "The server is not configured correctly.")
-        _client = OpenAI(api_key=api_key, timeout=REQUEST_TIMEOUT_SECONDS, max_retries=2)
+        # Optional: point the SDK at any OpenAI-compatible provider (e.g. Groq:
+        # https://api.groq.com/openai/v1). None means the default OpenAI URL.
+        _client = OpenAI(
+            api_key=api_key,
+            base_url=os.getenv("OPENAI_BASE_URL") or None,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            max_retries=2,
+        )
     return _client
 
 
@@ -57,11 +64,15 @@ def generate_reply(messages: list[ChatMessage]) -> str:
 
     client = _get_client()
     try:
-        response = client.responses.create(
+        # Chat Completions is the API OpenAI-compatible providers (Groq, etc.)
+        # all implement, so one code path works for both.
+        response = client.chat.completions.create(
             model=model,
-            instructions=SYSTEM_PROMPT,
-            input=[{"role": m.role, "content": m.content} for m in messages],
-            max_output_tokens=MAX_OUTPUT_TOKENS,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                *[{"role": m.role, "content": m.content} for m in messages],
+            ],
+            max_completion_tokens=MAX_OUTPUT_TOKENS,
         )
     except APITimeoutError:
         raise ChatServiceError(504, "The AI took too long to respond. Please try again.")
@@ -77,7 +88,7 @@ def generate_reply(messages: list[ChatMessage]) -> str:
         logger.error("OpenAI returned HTTP %s", exc.status_code)
         raise ChatServiceError(502, "The AI service returned an error.")
 
-    reply = response.output_text.strip()
+    reply = (response.choices[0].message.content or "").strip() if response.choices else ""
     if not reply:
         raise ChatServiceError(502, "The AI returned an empty response.")
     return reply
