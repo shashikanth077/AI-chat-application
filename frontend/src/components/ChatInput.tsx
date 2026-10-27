@@ -5,9 +5,10 @@ import { MAX_MESSAGE_CHARS } from '../constants';
 interface Props {
   disabled: boolean;
   onSend: (text: string) => void;
+  onStop: () => void;
 }
 
-export function ChatInput({ disabled, onSend }: Props) {
+export function ChatInput({ disabled, onSend, onStop }: Props) {
   const [text, setText] = useState('');
   const canSend = text.trim().length > 0 && !disabled;
 
@@ -40,7 +41,11 @@ export function ChatInput({ disabled, onSend }: Props) {
         <span className={`counter ${text.length > MAX_MESSAGE_CHARS * 0.9 ? 'warn' : ''}`}>
           {text.length}/{MAX_MESSAGE_CHARS}
         </span>
-        <button onClick={submit} disabled={!canSend}>Send</button>
+        {disabled ? (
+          <button className="stop" onClick={onStop}>Stop</button>
+        ) : (
+          <button onClick={submit} disabled={!canSend}>Send</button>
+        )}
       </div>
     </div>
   );

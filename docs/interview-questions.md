@@ -39,3 +39,8 @@
 1. How do you unit-test code that calls an external API, and what should and should not be mocked?
 2. Why use the Chat Completions format with a configurable base URL, and what does that buy you?
 3. How would you debug a request that works in Swagger but fails in the browser?
+
+## Phase 10
+1. Why Server-Sent Events instead of WebSockets for streaming a chat reply, and when would you pick WebSockets?
+2. Once a streaming response has started with HTTP 200, how do you report a later failure, and what must the client do if the stream ends without a "done" event?
+3. What happens when the user clicks Stop or closes the tab, and how do you make sure the server stops paying for tokens nobody will read?
