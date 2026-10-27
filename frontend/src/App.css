@@ -93,3 +93,11 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   .chat-input { padding: 8px; }
   .message-list { padding: 12px; }
 }
+
+.input-side { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; }
+.input-side button { padding: 8px 18px; }
+.counter { font-size: 0.75rem; color: var(--muted); }
+.counter.warn { color: var(--danger); }
+
+.error { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.error button.secondary { color: var(--danger); border-color: var(--danger); flex-shrink: 0; }
