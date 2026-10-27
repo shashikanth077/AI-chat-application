@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 
+from schemas import ChatRequest, ChatResponse
+
 app = FastAPI(title="AI Chat API")
 
 
@@ -8,8 +10,12 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-# Phase 3: temporary hardcoded endpoint. It ignores the request body for now;
-# Phase 4 adds Pydantic models so the body is parsed and validated.
-@app.post("/chat")
-def chat() -> dict[str, str]:
-    return {"reply": "Hello from FastAPI! (hardcoded response)"}
+# FastAPI sees the `ChatRequest` type hint on `request`, so it reads the JSON
+# body, validates it, and only then calls this function. Invalid input never
+# reaches our code: FastAPI replies 422 automatically.
+@app.post("/chat", response_model=ChatResponse)
+def chat(request: ChatRequest) -> ChatResponse:
+    last = request.messages[-1].content
+    return ChatResponse(
+        reply=f"(hardcoded) Got {len(request.messages)} message(s). Last: {last!r}"
+    )
