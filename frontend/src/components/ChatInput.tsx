@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import { MAX_MESSAGE_CHARS } from '../constants';
 
 interface Props {
   disabled: boolean;
@@ -32,8 +33,15 @@ export function ChatInput({ disabled, onSend }: Props) {
         onKeyDown={handleKeyDown}
         placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
         rows={2}
+        maxLength={MAX_MESSAGE_CHARS}
+        aria-label="Message"
       />
-      <button onClick={submit} disabled={!canSend}>Send</button>
+      <div className="input-side">
+        <span className={`counter ${text.length > MAX_MESSAGE_CHARS * 0.9 ? 'warn' : ''}`}>
+          {text.length}/{MAX_MESSAGE_CHARS}
+        </span>
+        <button onClick={submit} disabled={!canSend}>Send</button>
+      </div>
     </div>
   );
 }

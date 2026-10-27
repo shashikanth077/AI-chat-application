@@ -10,15 +10,10 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSend = async (text: string) => {
-    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: text };
-    // Build the new history up front: state updates are async, so
-    // `messages` inside this function would still be the old array.
-    const history = [...messages, userMsg];
-    setMessages(history);
+  // Shared by send and retry: ask the API for a reply to `history`.
+  const requestReply = async (history: ChatMessage[]) => {
     setError(null);
     setLoading(true);
-
     try {
       const reply = await sendChat(history);
       setMessages([...history, { id: crypto.randomUUID(), role: 'assistant', content: reply }]);
@@ -28,6 +23,19 @@ function App() {
       setLoading(false);
     }
   };
+
+  const handleSend = (text: string) => {
+    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: text };
+    // Build the new history up front: state updates are async, so
+    // `messages` inside this function would still be the old array.
+    const history = [...messages, userMsg];
+    setMessages(history);
+    void requestReply(history);
+  };
+
+  // After a failure the user message is still in `messages`, so retrying
+  // just re-sends the same history without adding a duplicate.
+  const handleRetry = () => void requestReply(messages);
 
   const handleClear = () => {
     setMessages([]);
@@ -42,7 +50,7 @@ function App() {
           Clear Chat
         </button>
       </header>
-      <MessageList messages={messages} loading={loading} error={error} />
+      <MessageList messages={messages} loading={loading} error={error} onRetry={handleRetry} />
       <ChatInput disabled={loading} onSend={handleSend} />
     </div>
   );

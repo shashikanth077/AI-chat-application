@@ -1,3 +1,4 @@
+import { MAX_HISTORY_MESSAGES } from '../constants';
 import type { ChatMessage } from '../types/chat';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
@@ -28,7 +29,9 @@ export async function sendChat(history: ChatMessage[]): Promise<string> {
       headers: { 'Content-Type': 'application/json' },
       // Send only what the API schema expects: drop the client-side `id`.
       body: JSON.stringify({
-        messages: history.map(({ role, content }) => ({ role, content })),
+        // The backend rejects >20 messages, and every message costs tokens,
+        // so send only the most recent window of the conversation.
+        messages: history.slice(-MAX_HISTORY_MESSAGES).map(({ role, content }) => ({ role, content })),
       }),
     });
   } catch {

@@ -29,3 +29,8 @@
 1. Why keep the API key on the server, and how do environment variables / .env / .gitignore work together?
 2. What is a system prompt (instructions) versus user/assistant messages, and why must the server own it?
 3. How do you handle OpenAI failures (timeout, rate limit, auth) without leaking internals, and which HTTP status codes do you map them to?
+
+## Phase 7
+1. Why trim conversation history before sending, and what are the trade-offs (context loss vs. cost/limits)?
+2. Why does the chat UI keep the user message after a failed request, and how does Retry avoid duplicates?
+3. Why must input limits exist on both frontend and backend, and which one is the real security boundary?

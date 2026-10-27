@@ -6,9 +6,10 @@ interface Props {
   messages: ChatMessage[];
   loading: boolean;
   error: string | null;
+  onRetry: () => void;
 }
 
-export function MessageList({ messages, loading, error }: Props) {
+export function MessageList({ messages, loading, error, onRetry }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Scroll to the sentinel div whenever content below changes.
@@ -31,7 +32,12 @@ export function MessageList({ messages, loading, error }: Props) {
           </div>
         </div>
       )}
-      {error && <div className="error" role="alert">{error}</div>}
+      {error && (
+        <div className="error" role="alert">
+          <span>{error}</span>
+          <button className="secondary" onClick={onRetry} disabled={loading}>Retry</button>
+        </div>
+      )}
       <div ref={bottomRef} />
     </div>
   );
