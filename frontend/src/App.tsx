@@ -11,7 +11,10 @@ import {
 import { isAbortError } from './services/http';
 import { MessageList } from './components/MessageList';
 import { ChatInput } from './components/ChatInput';
+import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
+import { useConfirm } from './hooks/useConfirm';
+import { useTheme } from './hooks/useTheme';
 import './App.css';
 
 const ACTIVE_KEY = 'activeConversationId';
@@ -54,6 +57,8 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [useDocuments, setUseDocuments] = useState(readUseDocuments);
+  const { theme, toggle: toggleTheme } = useTheme();
+  const { confirm, dialog } = useConfirm();
 
   // Lets the Stop button cancel the in-flight request.
   const abortRef = useRef<AbortController | null>(null);
@@ -222,7 +227,14 @@ function App() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this conversation? This cannot be undone.')) return;
+    const title = conversations.find((c) => c.id === id)?.title ?? 'this conversation';
+    const sure = await confirm({
+      title: 'Delete conversation?',
+      message: `"${title}" and all of its messages will be permanently deleted.`,
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!sure) return;
     try {
       await deleteConversation(id);
       setConversations((prev) => prev.filter((c) => c.id !== id));
@@ -234,6 +246,8 @@ function App() {
 
   // "Clear Chat" removes the open conversation; with none open it just resets.
   const handleClear = () => (activeId ? void handleDelete(activeId) : startNewChat());
+
+  const activeTitle = conversations.find((c) => c.id === activeId)?.title ?? 'New chat';
 
   return (
     <div className="shell">
@@ -247,32 +261,27 @@ function App() {
         onDelete={(id) => void handleDelete(id)}
         onClose={() => setSidebarOpen(false)}
       />
-      <div className="app">
-        <header className="header">
-          <button className="secondary menu" onClick={() => setSidebarOpen(true)} aria-label="Open conversations">
-            ☰
-          </button>
-          <h1>AI Chat</h1>
-          <label className="docs-toggle" title="Answer from your uploaded documents and cite them">
-            <input
-              type="checkbox"
-              checked={useDocuments}
-              onChange={(e) => toggleDocuments(e.target.checked)}
-            />
-            <span className="long">Use my documents</span>
-            <span className="short">Docs</span>
-          </label>
-          <button
-            className="secondary"
-            onClick={handleClear}
-            disabled={loading || (messages.length === 0 && !activeId)}
-          >
-            Clear Chat
-          </button>
-        </header>
-        <MessageList messages={messages} loading={loading} error={error} onRetry={handleRetry} />
+      <main className="app">
+        <Header
+          title={activeTitle}
+          useDocuments={useDocuments}
+          onToggleDocuments={toggleDocuments}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          onOpenSidebar={() => setSidebarOpen(true)}
+          onClear={handleClear}
+          clearDisabled={loading || (messages.length === 0 && !activeId)}
+        />
+        <MessageList
+          messages={messages}
+          loading={loading}
+          error={error}
+          onRetry={handleRetry}
+          onSuggest={(prompt) => void handleSend(prompt)}
+        />
         <ChatInput disabled={loading} onSend={(t) => void handleSend(t)} onStop={handleStop} />
-      </div>
+      </main>
+      {dialog}
     </div>
   );
 }

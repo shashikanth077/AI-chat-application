@@ -4,19 +4,22 @@ A full-stack AI chat app: a React + TypeScript frontend talks to a FastAPI backe
 OpenAI-compatible chat model (OpenAI, or Groq via a base URL). Built as a learning portfolio project.
 
 ## Features
-- Chat UI with user/assistant bubbles, auto-scroll, and a typing indicator
-- Enter to send, Shift+Enter for a new line
+- Polished chat UI: replies render as **markdown** (headings, lists, tables, code blocks with a copy button), with a welcome screen of suggested prompts, a typing indicator, and a streaming caret
+- Light and dark themes (follows your system until you choose; remembered)
+- Smart auto-scroll: follows the answer only while you're at the bottom, with a "jump to latest" button when you've scrolled up
+- Enter to send, Shift+Enter for a new line; the message box grows with your text
 - Streaming replies: text appears as it is generated, with a Stop button
-- Chat with your documents (RAG): upload `.txt`, `.md` or `.pdf`; answers are grounded in the most relevant passages, with numbered citations you can expand. A "Use my documents" switch turns it on or off
+- Chat with your documents (RAG): upload `.txt`, `.md` or `.pdf`; answers are grounded in the most relevant passages, with numbered citations: click an inline `[1]` or a source chip to read the exact passage. A "Use my documents" switch turns it on or off
 - Document library: files are split into chunks, embedded locally, stored in SQLite, and searchable on their own
-- Saved conversations (SQLite): a sidebar of past chats that survives refreshes and server restarts
+- Saved conversations (SQLite): a sidebar of past chats, grouped by date (Today, Yesterday, …), that survives refreshes and server restarts
 - Conversation context: follow-up questions work; the server loads the last 20 stored messages itself
 - Clear Chat (deletes the open conversation), error messages with a safe, duplicate-free Retry
 - Input limits (4000 characters per message) shown with a live counter
-- Responsive layout for desktop and mobile
+- Responsive layout: on phones the sidebar becomes a slide-in drawer; uploads also work by drag and drop
+- Accessible: keyboard-friendly, labelled controls, a real modal confirm dialog (focus trap, Escape) instead of the browser pop-up
 - Server-side validation with Pydantic; safe, mapped HTTP errors
 - API key kept on the backend and never logged or sent to the browser
-- Automated backend tests (pytest) with the provider mocked
+- Automated tests: 96 backend (pytest) and 71 frontend (Vitest), plus a CI workflow that runs both
 
 ## Architecture
 
@@ -31,7 +34,8 @@ React UI → fetch → FastAPI (POST /conversations/{id}/messages/stream)
 
 | Layer | Location | Responsibility |
 |---|---|---|
-| UI components | `frontend/src/components/` | Presentational pieces (input, list, bubble) |
+| UI components | `frontend/src/components/` | Header, message list and bubbles, markdown renderer, composer, confirm dialog (each with its own CSS) |
+| Hooks and helpers | `frontend/src/hooks/`, `frontend/src/lib/` | Theme and confirm hooks; citation linking and date grouping (pure, unit-tested) |
 | App state | `frontend/src/App.tsx` | Messages, loading, error, send/retry/clear |
 | API client | `frontend/src/services/` | `chatService.ts` (stream reader), `conversationService.ts` (CRUD), `http.ts` (errors) |
 | Sidebar | `frontend/src/components/Sidebar.tsx` | Saved chats, New chat, delete |
@@ -48,7 +52,7 @@ React UI → fetch → FastAPI (POST /conversations/{id}/messages/stream)
 ```
 AI-chat-application/
 ├── frontend/          React + TypeScript + Vite
-│   └── src/ (components/, services/, types/, App.tsx, main.tsx)
+│   └── src/ (components/, hooks/, lib/, services/, types/, test/, App.tsx, main.tsx)
 ├── backend/           FastAPI + Pydantic + OpenAI SDK
 │   ├── main.py  schemas.py  database.py  models.py  streaming.py
 │   ├── routers/conversations.py   services/openai_service.py
@@ -158,7 +162,7 @@ curl -X POST http://localhost:8000/documents/search -H "Content-Type: applicatio
 ```
 Search always returns the `top_k` best chunks, **however poor they are**. A low `score` means "not really related"; deciding what counts as relevant is the job of the next phase.
 
-Embeddings: the default is a small local model (`BAAI/bge-small-en-v1.5`, about 130 MB), downloaded once on the first upload or search into `backend/.model_cache/` and then fully offline. Chat can use Groq while embeddings stay local, because Groq has no embeddings API. `EMBEDDING_BACKEND=hashing` selects a built-in offline word-matching embedder for tests and development: it matches shared words, **not meaning**.
+Embeddings: the default is a small local model (`BAAI/bge-small-en-v1.5`, about 130 MB), downloaded once on the first upload or search into `backend/.model_cache/` and then fully offline. Chat can use Groq while embeddings stay local, because Groq has no embeddings API. `EMBEDDING_BACKEND=hashing` selects a built-in offline word-matching embedder for tests and development: it matches shared words, **not meaning**, and because it hashes words into 384 buckets it can occasionally give unrelated text a non-zero score (a hash collision).
 
 ### `POST /chat` and `POST /chat/stream` (stateless)
 These take the whole history from the client and store nothing; they are the original Phase 6 and 10 endpoints.
@@ -208,6 +212,8 @@ data: {}
 Interactive docs: `http://localhost:8000/docs`.
 
 ## Testing
+
+### Backend
 ```bash
 cd backend
 source .venv/bin/activate
@@ -215,6 +221,18 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 The 96 tests cover validation, error mapping, safe error messages, CORS, streaming (including mid-stream failure and cancellation), conversation storage, idempotent retry, cascade deletes, document upload (text, markdown, PDF, limits, filename safety), chunking, embedding failures, similarity ranking, RAG prompt building (relevance threshold, prompt-injection escaping, citations surviving retries and document deletion), and that invalid input never reaches the model. Database tests use a throwaway SQLite file per test. See `docs/testing.md` for the manual end-to-end checklist.
+
+### Frontend
+```bash
+cd frontend
+npm install
+npm test            # 71 tests (Vitest + Testing Library)
+npm run lint && npx tsc -b && npm run build
+```
+The tests cover the pieces that are easy to get subtly wrong: the SSE frame parser (frames split across network reads, newlines in text, error and sources frames), citation linking (never inside code, never for a source that doesn't exist), date grouping (including the API's timezone-less UTC timestamps), the composer (Enter vs Shift+Enter, IME composition, Stop), **markdown safety** (script, image, iframe and `javascript:` payloads rendered inert), citations (open, close, chips), the confirm dialog (focus, Escape, focus trap), the sidebar, the documents panel (validation, drag and drop, delete confirmation), the theme hook, and a regression test that streamed text updates the existing DOM instead of rebuilding it.
+
+### Continuous integration
+`.github/workflows/ci.yml` runs the backend tests and the frontend lint, type-check, tests and build on every push and pull request. The tests need no API keys, network access or model download.
 
 ## Configuration and limits
 | Setting | Where | Default |
@@ -239,6 +257,7 @@ To use PostgreSQL later, set `DATABASE_URL` (for example `postgresql+psycopg://u
 - Requests are size-limited to control cost and abuse.
 - The server decides the model's context from its own database. A client can't inject fake turns by sending history.
 - Message text is never written to the logs.
+- **Rendering model output safely.** Replies are rendered as markdown with `react-markdown`, which builds React elements and never inserts raw HTML, so a reply containing `<script>`, `<img onerror=…>` or an `<iframe>` is shown as inert text. Images are dropped entirely (a remote image URL in model output would be a tracking pixel), `javascript:` links are neutralized, and external links open in a new tab with `rel="noopener noreferrer"`. All of this is covered by tests. A Content-Security-Policy header would add defense in depth when deploying.
 - **Prompt injection from documents.** Retrieved text is untrusted: a document can contain "ignore your instructions". Passages are placed in the *user* turn inside a `<sources>` block (never in the system prompt), any `<sources>` tags inside them are escaped so a document can't close the block early, and the system prompt tells the model to treat the block as reference text only. This reduces the risk but cannot eliminate it: a model may still be influenced by text it reads. Don't index documents you don't trust, and never give the model tools or secrets that a document could talk it into misusing.
 - Uploaded files are processed in memory and never written to disk, so there is no path-traversal or disk-filling risk from them. The filename is only a display label (directories are stripped). Size, type, document-count and chunk-count limits bound storage and compute. Note that the web framework may buffer a very large request body before the 2 MB check runs, so in production also cap request size at the reverse proxy.
 - **There is no authentication yet.** Anyone who can reach the API can list, read and delete every conversation. That is fine for local use only. Before deploying, add user accounts and an ownership check on every `/conversations` route.
@@ -255,4 +274,5 @@ Cosine scores are not probabilities and differ between models. The default `0.5`
 ## Learning guide
 - `docs/AI-Chat-Learning-Guide.html`: interactive walkthrough of how the app was built (Phases 1 to 9 concepts)
 - `docs/AI-Chat-Flows-Guide.html`: step-by-step sequence diagrams of every end-to-end flow in the current app (startup, send, streaming, Stop, failures and Retry, database, conversations, UI states, security, testing, endpoints)
-- `docs/AI-Chat-Interview-Guide.pdf`: all interview questions, with answers and diagrams
+- `docs/AI-Chat-RAG-Flows-Guide.html`: the same style of guide for documents and RAG (upload and indexing, search and thresholds, answering with citations), with live labs for chunking, scoring, and prompt building
+- `docs/AI-Chat-Interview-Guide.pdf`: all 49 interview questions (Phases 1 to 14), with answers and diagrams

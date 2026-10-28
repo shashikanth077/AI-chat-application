@@ -79,3 +79,25 @@ The OpenAI client is mocked, so tests are free, offline and deterministic.
 | Irrelevant passages are cited | Threshold too low | Raise `RAG_MIN_SCORE` |
 | Follow-up like "what about its price?" finds nothing | Only the newest question is searched, and it has no context on its own | Ask a self-contained question (query rewriting is on the roadmap) |
 | 503 "Document search is unavailable" | Embedding model can't load | Fix the download, or turn the switch off |
+
+## Frontend (Phase 14)
+
+### Automated
+```bash
+cd frontend && npm test
+```
+71 tests. They use no network and no real server: the API layer is mocked where needed. See the README's Testing section for what they cover.
+
+### Manual UI checklist
+1. **Welcome screen:** with no chat open you see four suggestion cards. Clicking one sends it.
+2. **Markdown:** ask for "a Python function and a comparison table". You get a code block (with a language label and **Copy code**), a table, and lists, not raw `**` and `|` characters.
+3. **Safety:** paste into a document or ask the model to output `<script>alert(1)</script>`. It appears as literal text and nothing runs.
+4. **Streaming:** the caret blinks at the end while text arrives; there is no Copy button until the reply finishes.
+5. **Scrolling:** scroll up while an answer streams. The view must stay where you put it, and a round **jump to latest** button appears. Clicking it returns you to the bottom.
+6. **Citations:** with documents on, click an inline `[1]` and a source chip. The same passage opens, and clicking again closes it.
+7. **Theme:** the moon/sun button switches themes; reload and it's remembered. Clear your saved choice (`localStorage.removeItem('theme')`) and it follows your OS again.
+8. **Dialogs:** deleting a chat or a document opens a styled dialog with **Cancel** focused. Escape cancels; Tab stays inside the dialog.
+9. **Sidebar:** chats are grouped under Today / Yesterday / Previous 7 days / Older. Delete icons appear on hover (always visible on touch screens).
+10. **Documents:** drag a `.txt` file onto the dashed area (it highlights), and upload works. The panel collapses with its header.
+11. **Phone width (below about 820px):** the ☰ button opens a drawer; choosing a chat closes it; nothing scrolls sideways.
+12. **Keyboard:** Enter sends, Shift+Enter adds a line, and the box grows up to about 8 lines. Focus returns to it when a reply finishes.

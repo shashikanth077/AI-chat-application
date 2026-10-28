@@ -1,0 +1,84 @@
+.composer-wrap {
+  flex-shrink: 0;
+  padding: 8px 16px calc(10px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
+}
+.composer {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: var(--content-w);
+  margin: 0 auto;
+  padding: 8px 8px 8px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.composer:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow);
+}
+.composer textarea {
+  flex: 1;
+  min-width: 0;
+  max-height: 200px;
+  padding: 7px 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  resize: none;
+  line-height: 1.5;
+}
+.composer textarea::placeholder {
+  color: var(--muted);
+}
+.char-count {
+  align-self: center;
+  font-size: 0.75rem;
+  color: var(--danger);
+  font-variant-numeric: tabular-nums;
+}
+.send-btn {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  transition: background 0.15s, transform 0.1s, opacity 0.15s;
+}
+.send-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.send-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.send-btn:disabled {
+  background: var(--surface-3);
+  color: var(--muted);
+}
+.send-btn.stop {
+  background: var(--text);
+  color: var(--surface);
+}
+.composer-hint {
+  max-width: var(--content-w);
+  margin: 6px auto 0;
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+@media (max-width: 640px) {
+  .composer-wrap {
+    padding: 6px 10px calc(8px + env(safe-area-inset-bottom));
+  }
+  .composer-hint {
+    display: none;
+  }
+}
