@@ -1,0 +1,28 @@
+.demo-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 7px 16px;
+  font-size: 12.5px;
+  color: var(--text);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 16%, var(--bg)), color-mix(in srgb, #a855f7 16%, var(--bg)));
+  border-bottom: 1px solid var(--border);
+}
+.demo-banner-sep { color: var(--muted); }
+.demo-banner-actions { display: inline-flex; gap: 14px; }
+.demo-banner button,
+.demo-banner a {
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: none;
+  font-weight: 600;
+}
+.demo-banner button:hover,
+.demo-banner a:hover { text-decoration: underline; }
+@media (max-width: 600px) { .demo-banner-sep { display: none; } .demo-banner-text strong { margin-right: 6px; } }

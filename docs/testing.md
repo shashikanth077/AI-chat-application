@@ -101,3 +101,13 @@ cd frontend && npm test
 10. **Documents:** drag a `.txt` file onto the dashed area (it highlights), and upload works. The panel collapses with its header.
 11. **Phone width (below about 820px):** the ☰ button opens a drawer; choosing a chat closes it; nothing scrolls sideways.
 12. **Keyboard:** Enter sends, Shift+Enter adds a line, and the box grows up to about 8 lines. Focus returns to it when a reply finishes.
+
+## Manual UI checklist (design pass)
+- Welcome screen shows four suggestion cards; clicking one sends it.
+- `Ctrl/Cmd+Shift+O` starts a new chat, `Ctrl/Cmd+B` collapses the sidebar (remembered after reload), `/` focuses the box, `Esc` stops a reply.
+- The `...` menu offers **Export as Markdown** (disabled on an empty chat) and **About**; About lists the model, provider host and shortcuts.
+- **Regenerate** on the last answer replaces it without duplicating your message, also after a page refresh.
+- Search chats filters the sidebar; code blocks are highlighted with a working Copy button.
+- Check light and dark themes and a phone-width window (the sidebar becomes a drawer).
+- Demo build (`VITE_DEMO=true`): the banner shows, sample documents are listed, **Reset demo** clears chats and uploads, `.pdf` uploads are refused.
+- Automated version of most of this: `frontend/e2e/smoke.cjs` (see the README).

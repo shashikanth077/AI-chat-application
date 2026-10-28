@@ -2,26 +2,24 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import type { ChatMessage } from '../types/chat';
 import { AlertIcon, ArrowDownIcon, RetryIcon, SparklesIcon } from './icons';
 import { MessageBubble } from './MessageBubble';
+import { Welcome } from './Welcome';
 import './MessageList.css';
-
-const SUGGESTIONS = [
-  { title: 'Explain a concept', prompt: 'Explain retrieval-augmented generation (RAG) in simple terms, with an example.' },
-  { title: 'Write some code', prompt: 'Write a Python function that merges two sorted lists, with a short explanation.' },
-  { title: 'Compare options', prompt: 'Compare SQLite and PostgreSQL for a small web app. Use a table.' },
-  { title: 'Plan something', prompt: 'Make a 2-week study plan for learning FastAPI from scratch.' },
-];
 
 const NEAR_BOTTOM_PX = 120;
 
 interface Props {
   messages: ChatMessage[];
   loading: boolean;
+  opening: boolean; // a saved conversation is being fetched
+  searching: boolean; // the documents are being searched before the answer starts
   error: string | null;
+  demo: boolean;
   onRetry?: () => void; // omitted when there is nothing to retry
+  onRegenerate?: () => void; // omitted unless the last answer can be regenerated
   onSuggest: (prompt: string) => void;
 }
 
-export function MessageList({ messages, loading, error, onRetry, onSuggest }: Props) {
+export function MessageList({ messages, loading, opening, searching, error, demo, onRetry, onRegenerate, onSuggest }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true); // follow new content only while the reader is at the bottom
   const [atBottom, setAtBottom] = useState(true);
@@ -54,39 +52,49 @@ export function MessageList({ messages, loading, error, onRetry, onSuggest }: Pr
 
   return (
     <div className="messages-wrap">
-      <div className="messages" ref={scroller} onScroll={onScroll} role="log" aria-live="polite" aria-label="Conversation">
+      <div className="messages" ref={scroller} onScroll={onScroll} role="log" aria-live="polite" aria-label="Conversation" aria-busy={opening}>
         <div className="thread">
-          {messages.length === 0 && !loading && (
-            <div className="empty">
-              <div className="empty-mark" aria-hidden="true">
-                <SparklesIcon size={26} />
-              </div>
-              <h2>How can I help you today?</h2>
-              <p>Ask anything, or upload documents in the sidebar and ask about them.</p>
-              <div className="suggestions">
-                {SUGGESTIONS.map((s) => (
-                  <button key={s.title} className="suggestion" onClick={() => onSuggest(s.prompt)}>
-                    <strong>{s.title}</strong>
-                    <span>{s.prompt}</span>
-                  </button>
-                ))}
+          {opening && (
+            <div className="skeleton" aria-label="Loading conversation">
+              <div className="sk-line sk-right" />
+              <div className="sk-row">
+                <div className="sk-avatar" />
+                <div className="sk-lines">
+                  <div className="sk-line" />
+                  <div className="sk-line" />
+                  <div className="sk-line sk-short" />
+                </div>
               </div>
             </div>
           )}
 
-          {messages.map((m, i) => (
-            <MessageBubble key={m.id} message={m} streaming={loading && i === messages.length - 1 && m.role === 'assistant'} />
-          ))}
+          {!opening && messages.length === 0 && !loading && <Welcome demo={demo} onSuggest={onSuggest} />}
 
-          {waiting && (
+          {!opening &&
+            messages.map((m, i) => {
+              const isLast = i === messages.length - 1;
+              return (
+                <MessageBubble
+                  key={m.id}
+                  message={m}
+                  streaming={loading && isLast && m.role === 'assistant'}
+                  onRegenerate={isLast && m.role === 'assistant' ? onRegenerate : undefined}
+                />
+              );
+            })}
+
+          {!opening && waiting && (
             <div className="msg msg-assistant">
               <div className="avatar" aria-hidden="true">
                 <SparklesIcon size={16} />
               </div>
-              <div className="typing" aria-label="Assistant is typing">
-                <span />
-                <span />
-                <span />
+              <div className="thinking" role="status">
+                <div className="typing" aria-label="Assistant is typing">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <span className="thinking-label">{searching ? 'Searching your documents…' : 'Thinking…'}</span>
               </div>
             </div>
           )}

@@ -1,16 +1,17 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import type { ChatMessage } from '../types/chat';
 import { CopyButton } from './CopyButton';
-import { InfoIcon, SparklesIcon } from './icons';
+import { InfoIcon, RetryIcon, SparklesIcon } from './icons';
 import { Markdown } from './Markdown';
 import './MessageBubble.css';
 
 interface Props {
   message: ChatMessage;
   streaming?: boolean; // the answer is still being written
+  onRegenerate?: () => void; // only given for the last answer
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, streaming = false }: Props) {
+export const MessageBubble = memo(function MessageBubble({ message, streaming = false, onRegenerate }: Props) {
   const [openSource, setOpenSource] = useState<number | null>(null);
   const detail = useRef<HTMLDivElement>(null);
   const sources = message.sources ?? [];
@@ -60,6 +61,9 @@ export const MessageBubble = memo(function MessageBubble({ message, streaming = 
                 >
                   <span className="source-n">{s.n}</span>
                   <span className="source-name">{s.filename}</span>
+                  <span className="source-meter" aria-hidden="true">
+                    <span style={{ width: `${Math.round(Math.max(0, Math.min(1, s.score)) * 100)}%` }} />
+                  </span>
                   <span className="source-score">{s.score.toFixed(2)}</span>
                 </button>
               ))}
@@ -87,6 +91,11 @@ export const MessageBubble = memo(function MessageBubble({ message, streaming = 
         {!streaming && message.content && (
           <div className="msg-actions">
             <CopyButton text={message.content} label="Copy reply" />
+            {onRegenerate && (
+              <button type="button" className="copy-btn" onClick={onRegenerate} aria-label="Regenerate response" title="Regenerate response">
+                <RetryIcon size={15} />
+              </button>
+            )}
           </div>
         )}
       </div>

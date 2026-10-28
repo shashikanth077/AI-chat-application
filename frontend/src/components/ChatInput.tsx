@@ -76,7 +76,7 @@ export function ChatInput({ disabled, onSend, onStop }: Props) {
           </button>
         )}
       </div>
-      <p className="composer-hint">Enter to send · Shift+Enter for a new line</p>
+      <p className="composer-hint">AI can make mistakes. Check important information. <span>Enter to send · Shift+Enter for a new line</span></p>
     </div>
   );
 }

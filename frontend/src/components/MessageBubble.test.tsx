@@ -114,6 +114,24 @@ describe('rendering stability', () => {
   });
 });
 
+describe('regenerate and relevance', () => {
+  it('shows Regenerate only when the parent offers it, and calls it', async () => {
+    const onRegenerate = vi.fn();
+    const { rerender } = render(<MessageBubble message={reply('Answer')} />);
+    expect(screen.queryByRole('button', { name: 'Regenerate response' })).not.toBeInTheDocument();
+    rerender(<MessageBubble message={reply('Answer')} onRegenerate={onRegenerate} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Regenerate response' }));
+    expect(onRegenerate).toHaveBeenCalledOnce();
+  });
+
+  it('draws a decorative relevance meter on each source chip, proportional to its score', () => {
+    const { container } = render(<MessageBubble message={reply('A', { sources: [{ ...source(1), score: 0.5 }, { ...source(2), score: 1.7 }] })} />);
+    const bars = Array.from(container.querySelectorAll('.source-meter > span')) as HTMLElement[];
+    expect(bars.map((b) => b.style.width)).toEqual(['50%', '100%']); // clamped
+    expect(container.querySelector('.source-meter')).toHaveAttribute('aria-hidden', 'true');
+  });
+});
+
 describe('copy and streaming', () => {
   it('copies the raw reply text and confirms', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);

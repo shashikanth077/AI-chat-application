@@ -1,3 +1,5 @@
+import { DEMO } from '../config';
+
 export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 
 // FastAPI returns 422 as { detail: [{ msg, loc, ... }] } and other errors as
@@ -22,7 +24,11 @@ export function isAbortError(e: unknown): boolean {
 export async function fetchOrThrow(path: string, init?: RequestInit): Promise<Response> {
   let response: Response;
   try {
-    response = await fetch(`${API_URL}${path}`, init);
+    // The demo build has no server: a small in-browser stand-in answers instead
+    // (loaded lazily, so a normal build never ships it in the main bundle).
+    response = DEMO
+      ? await (await import('../demo/api')).demoFetch(path, init)
+      : await fetch(`${API_URL}${path}`, init);
   } catch (e) {
     if (isAbortError(e)) throw e;
     // fetch only rejects on network-level failures (server down, CORS block).

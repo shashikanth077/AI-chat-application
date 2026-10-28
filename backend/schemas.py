@@ -82,6 +82,9 @@ class StoredMessage(BaseModel):
     id: int
     role: Literal["user", "assistant"]
     content: str
+    # The id the client generated for a user message. Sending it again is a retry, so exposing it
+    # lets the UI regenerate an answer even after a page refresh.
+    client_id: str | None = None
     sources: list[SourceOut] = []
 
 
@@ -116,3 +119,26 @@ class SearchResult(BaseModel):
     position: int
     text: str
     score: float
+
+
+# ---- Deployment info ----
+
+
+class InfoLimits(BaseModel):
+    max_message_chars: int
+    history_messages: int
+    max_upload_bytes: int
+    max_documents: int
+
+
+class InfoResponse(BaseModel):
+    """Non-secret facts about this deployment, shown in the UI. Never includes keys."""
+
+    app: str
+    version: str
+    demo: bool
+    model: str | None
+    provider: str | None
+    embedding_backend: str
+    embedding_model: str
+    limits: InfoLimits
