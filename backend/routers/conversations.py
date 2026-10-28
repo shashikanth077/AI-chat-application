@@ -7,16 +7,19 @@ from sqlalchemy.orm import Session
 
 import database
 from database import get_db
-from models import DEFAULT_TITLE, Conversation, Message
+from models import DEFAULT_TITLE, Conversation, Message, MessageSource
 from schemas import (
     MAX_HISTORY_MESSAGES,
+    SearchResult,
     ChatMessage,
     ConversationDetail,
     ConversationSummary,
     NewMessageRequest,
 )
+from services import rag
+from services.embeddings import EmbeddingError
 from services.openai_service import ChatServiceError, open_reply_stream
-from streaming import sse_response
+from streaming import sse, sse_response
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -59,14 +62,23 @@ def _recent_context(db: Session, conversation_id: str) -> list[ChatMessage]:
     return [ChatMessage.model_construct(role=r.role, content=r.content) for r in reversed(rows)]
 
 
-def _save_assistant_message(conversation_id: str, text: str) -> None:
+def _save_assistant_message(conversation_id: str, text: str, passages: list[SearchResult] | None = None) -> None:
     if not text.strip():
         return
     # A fresh session: the request's session may already be closed by the
     # time a long-running stream finishes.
     try:
         with database.SessionLocal() as db:
-            db.add(Message(conversation_id=conversation_id, role="assistant", content=text))
+            message = Message(conversation_id=conversation_id, role="assistant", content=text)
+            # A snapshot of the passages the answer was based on, numbered as the model saw them.
+            message.sources = [
+                MessageSource(
+                    n=i, document_id=p.document_id, filename=p.filename,
+                    position=p.position, score=p.score, text=p.text,
+                )
+                for i, p in enumerate(passages or [], 1)
+            ]
+            db.add(message)
             conversation = db.get(Conversation, conversation_id)
             if conversation is not None:  # it may have been deleted mid-stream
                 conversation.updated_at = _now()
@@ -145,9 +157,31 @@ def send_message(
 
     # Errors before the first token are still ordinary HTTP errors. The user's
     # message stays saved, so Retry (same client_message_id) can pick it up.
+    context = _recent_context(db, conversation_id)
+
+    passages: list[SearchResult] | None = None
+    if body.use_documents:
+        try:
+            passages = rag.retrieve(db, context[-1].content)  # the newest user message
+        except EmbeddingError:
+            raise HTTPException(
+                status_code=503,
+                detail="Document search is unavailable. Turn off 'Use my documents' to chat without it.",
+            )
+    system_addendum, provider_messages = rag.build_prompt(context, passages)
+
     try:
-        deltas = open_reply_stream(_recent_context(db, conversation_id))
+        deltas = open_reply_stream(provider_messages, system_addendum)
     except ChatServiceError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message)
 
-    return sse_response(deltas, lambda text: _save_assistant_message(conversation_id, text))
+    # The sources are the first frame, before any text, so the UI can show them
+    # as soon as the answer starts. Not sent at all when retrieval did not run.
+    preface = None
+    if passages is not None:
+        preface = [sse(
+            {"sources": [{"n": i, "filename": p.filename, "position": p.position, "score": p.score, "text": p.text}
+                         for i, p in enumerate(passages, 1)]},
+            event="sources",
+        )]
+    return sse_response(deltas, lambda text: _save_assistant_message(conversation_id, text, passages), preface)

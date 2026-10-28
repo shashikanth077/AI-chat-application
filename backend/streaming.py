@@ -1,12 +1,13 @@
 import json
 from collections.abc import Callable, Generator
+from typing import Any
 
 from fastapi.responses import StreamingResponse
 
 from services.openai_service import ChatServiceError
 
 
-def sse(data: dict[str, str], event: str | None = None) -> str:
+def sse(data: dict[str, Any], event: str | None = None) -> str:
     """Format one Server-Sent Event. JSON keeps newlines in the text safe."""
     prefix = f"event: {event}\n" if event else ""
     return f"{prefix}data: {json.dumps(data)}\n\n"
@@ -15,6 +16,7 @@ def sse(data: dict[str, str], event: str | None = None) -> str:
 def sse_events(
     deltas: Generator[str, None, None],
     on_finish: Callable[[str], None] | None = None,
+    preface: list[str] | None = None,
 ) -> Generator[str, None, None]:
     """Turn text pieces into SSE frames.
 
@@ -25,6 +27,7 @@ def sse_events(
     """
     parts: list[str] = []
     try:
+        yield from preface or []  # ready-made frames sent before the first token
         for text in deltas:
             parts.append(text)
             yield sse({"delta": text})
@@ -40,9 +43,10 @@ def sse_events(
 def sse_response(
     deltas: Generator[str, None, None],
     on_finish: Callable[[str], None] | None = None,
+    preface: list[str] | None = None,
 ) -> StreamingResponse:
     return StreamingResponse(
-        sse_events(deltas, on_finish),
+        sse_events(deltas, on_finish, preface),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

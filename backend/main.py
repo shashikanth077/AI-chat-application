@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 load_dotenv()
 
 from database import init_db  # noqa: E402
-from routers import conversations  # noqa: E402
+from routers import conversations, documents  # noqa: E402
 from schemas import ChatRequest, ChatResponse  # noqa: E402
 from services.openai_service import (  # noqa: E402
     ChatServiceError,
@@ -42,6 +42,7 @@ app.add_middleware(
 )
 
 app.include_router(conversations.router)
+app.include_router(documents.router)
 
 
 @app.get("/health")

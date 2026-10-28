@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ChatMessage, ConversationSummary } from './types/chat';
+import type { ChatMessage, ConversationSummary, Source } from './types/chat';
 import { streamMessage } from './services/chatService';
+import type { StreamHandlers } from './services/chatService';
 import {
   createConversation,
   deleteConversation,
@@ -14,6 +15,7 @@ import { Sidebar } from './components/Sidebar';
 import './App.css';
 
 const ACTIVE_KEY = 'activeConversationId';
+const DOCS_KEY = 'useDocuments';
 
 // localStorage can throw (private mode, blocked storage); it is only a convenience.
 function readStoredId(): string | null {
@@ -32,9 +34,17 @@ function writeStoredId(id: string | null): void {
   }
 }
 
+function readUseDocuments(): boolean {
+  try {
+    return localStorage.getItem(DOCS_KEY) !== 'false'; // on unless the user turned it off
+  } catch {
+    return true;
+  }
+}
+
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.');
 
-type StartStream = (onDelta: (text: string) => void, signal: AbortSignal) => Promise<void>;
+type StartStream = (handlers: StreamHandlers, signal: AbortSignal) => Promise<void>;
 
 function App() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -43,6 +53,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [useDocuments, setUseDocuments] = useState(readUseDocuments);
 
   // Lets the Stop button cancel the in-flight request.
   const abortRef = useRef<AbortController | null>(null);
@@ -67,7 +78,14 @@ function App() {
       if (seq !== openSeq.current) return;
       setActiveId(id);
       writeStoredId(id);
-      setMessages(detail.messages.map((m) => ({ id: `db-${m.id}`, role: m.role, content: m.content })));
+      setMessages(
+        detail.messages.map((m) => ({
+          id: `db-${m.id}`,
+          role: m.role,
+          content: m.content,
+          sources: m.sources.length > 0 ? m.sources : undefined,
+        })),
+      );
       setSidebarOpen(false);
     } catch (e) {
       if (seq === openSeq.current) setError(messageOf(e));
@@ -111,20 +129,35 @@ function App() {
     abortRef.current = controller;
     const replyId = crypto.randomUUID();
     let started = false;
+    // The sources frame arrives before the first token, so hold it until the bubble exists.
+    let sources: Source[] | null = null;
 
     try {
-      await start((delta) => {
-        if (!started) {
-          // The assistant bubble appears with the first token.
-          started = true;
-          setMessages((prev) => [...prev, { id: replyId, role: 'assistant', content: delta }]);
-        } else {
-          // Functional update: many deltas can arrive before React re-renders.
-          setMessages((prev) =>
-            prev.map((m) => (m.id === replyId ? { ...m, content: m.content + delta } : m)),
-          );
-        }
-      }, controller.signal);
+      await start(
+        {
+          onSources: (found) => {
+            sources = found;
+          },
+          onDelta: (delta) => {
+            if (!started) {
+              // The assistant bubble appears with the first token.
+              started = true;
+              const withSources = sources && sources.length > 0 ? sources : undefined;
+              const noMatch = sources !== null && sources.length === 0;
+              setMessages((prev) => [
+                ...prev,
+                { id: replyId, role: 'assistant', content: delta, sources: withSources, noMatch },
+              ]);
+            } else {
+              // Functional update: many deltas can arrive before React re-renders.
+              setMessages((prev) =>
+                prev.map((m) => (m.id === replyId ? { ...m, content: m.content + delta } : m)),
+              );
+            }
+          },
+        },
+        controller.signal,
+      );
     } catch (e) {
       // Stop is a user choice, not a failure. Any partial text is kept.
       if (!isAbortError(e)) setError(messageOf(e));
@@ -158,8 +191,8 @@ function App() {
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: text };
     setMessages((prev) => [...prev, userMsg]);
     const conversationId = id;
-    void requestReply((onDelta, signal) =>
-      streamMessage(conversationId, userMsg.id, text, onDelta, signal),
+    void requestReply((handlers, signal) =>
+      streamMessage(conversationId, userMsg.id, text, useDocuments, handlers, signal),
     );
   };
 
@@ -171,13 +204,22 @@ function App() {
       ? () => {
           const lastIndex = messages.findIndex((m) => m.id === lastUser.id);
           setMessages(messages.slice(0, lastIndex + 1)); // drop the partial bubble
-          void requestReply((onDelta, signal) =>
-            streamMessage(activeId, lastUser.id, lastUser.content, onDelta, signal),
+          void requestReply((handlers, signal) =>
+            streamMessage(activeId, lastUser.id, lastUser.content, useDocuments, handlers, signal),
           );
         }
       : undefined;
 
   const handleStop = () => abortRef.current?.abort();
+
+  const toggleDocuments = (on: boolean) => {
+    setUseDocuments(on);
+    try {
+      localStorage.setItem(DOCS_KEY, String(on));
+    } catch {
+      /* ignore */
+    }
+  };
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('Delete this conversation? This cannot be undone.')) return;
@@ -211,6 +253,15 @@ function App() {
             ☰
           </button>
           <h1>AI Chat</h1>
+          <label className="docs-toggle" title="Answer from your uploaded documents and cite them">
+            <input
+              type="checkbox"
+              checked={useDocuments}
+              onChange={(e) => toggleDocuments(e.target.checked)}
+            />
+            <span className="long">Use my documents</span>
+            <span className="short">Docs</span>
+          </label>
           <button
             className="secondary"
             onClick={handleClear}

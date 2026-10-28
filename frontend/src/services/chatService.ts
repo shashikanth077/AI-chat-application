@@ -1,11 +1,18 @@
+import type { Source } from '../types/chat';
 import { fetchOrThrow } from './http';
+
+export interface StreamHandlers {
+  onDelta: (text: string) => void;
+  // Sent once, before the first token, when the user's documents were searched.
+  onSources: (sources: Source[]) => void;
+}
 
 interface StreamState {
   finished: boolean;
 }
 
 // One SSE frame looks like:  "event: error\ndata: {...}"  (event line optional).
-function handleFrame(frame: string, onDelta: (text: string) => void, state: StreamState): void {
+function handleFrame(frame: string, handlers: StreamHandlers, state: StreamState): void {
   let event = 'message';
   let data = '';
   for (const line of frame.split('\n')) {
@@ -14,15 +21,17 @@ function handleFrame(frame: string, onDelta: (text: string) => void, state: Stre
   }
   if (!data) return;
 
-  const payload = JSON.parse(data) as { delta?: string; detail?: string };
+  const payload = JSON.parse(data) as { delta?: string; detail?: string; sources?: Source[] };
   if (event === 'error') throw new Error(payload.detail ?? 'The response failed.');
   if (event === 'done') state.finished = true;
-  else if (payload.delta) onDelta(payload.delta);
+  else if (event === 'sources') handlers.onSources(payload.sources ?? []);
+  else if (payload.delta) handlers.onDelta(payload.delta);
 }
 
 /**
- * Sends one new user message to a stored conversation and calls `onDelta` with
- * each piece of the reply as it arrives. The server already has the history,
+ * Sends one new user message to a stored conversation and calls `handlers.onDelta`
+ * with each piece of the reply as it arrives (and `onSources` once, first, if the
+ * user's documents were searched). The server already has the history,
  * so only the new text goes over the wire. Resolves when the stream completes;
  * rejects on failure, or with an AbortError when `signal` is aborted (Stop).
  *
@@ -33,14 +42,15 @@ export async function streamMessage(
   conversationId: string,
   messageId: string,
   content: string,
-  onDelta: (text: string) => void,
+  useDocuments: boolean,
+  handlers: StreamHandlers,
   signal: AbortSignal,
 ): Promise<void> {
   // Errors before the first token arrive as ordinary HTTP errors with JSON.
   const response = await fetchOrThrow(`/conversations/${conversationId}/messages/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content, client_message_id: messageId }),
+    body: JSON.stringify({ content, client_message_id: messageId, use_documents: useDocuments }),
     signal,
   });
   if (!response.body) throw new Error('The server sent no response body.');
@@ -58,7 +68,7 @@ export async function streamMessage(
     buffer += decoder.decode(value, { stream: true });
     let end: number;
     while ((end = buffer.indexOf('\n\n')) !== -1) {
-      handleFrame(buffer.slice(0, end), onDelta, state);
+      handleFrame(buffer.slice(0, end), handlers, state);
       buffer = buffer.slice(end + 2);
     }
   }

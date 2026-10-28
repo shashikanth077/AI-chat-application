@@ -82,7 +82,7 @@ def _translate(exc: OpenAIError) -> ChatServiceError:
     return ChatServiceError(502, "The AI service returned an error.")
 
 
-def _build_request(messages: list[ChatMessage]) -> tuple[OpenAI, dict[str, Any]]:
+def _build_request(messages: list[ChatMessage], system_addendum: str = "") -> tuple[OpenAI, dict[str, Any]]:
     model = os.getenv("OPENAI_MODEL")
     if not model:
         logger.error("OPENAI_MODEL is not set")
@@ -93,7 +93,7 @@ def _build_request(messages: list[ChatMessage]) -> tuple[OpenAI, dict[str, Any]]
     kwargs: dict[str, Any] = {
         "model": model,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": f"{SYSTEM_PROMPT}\n\n{system_addendum}" if system_addendum else SYSTEM_PROMPT},
             *[{"role": m.role, "content": m.content} for m in messages],
         ],
         "max_completion_tokens": MAX_OUTPUT_TOKENS,
@@ -114,7 +114,7 @@ def generate_reply(messages: list[ChatMessage]) -> str:
     return reply
 
 
-def open_reply_stream(messages: list[ChatMessage]) -> Generator[str, None, None]:
+def open_reply_stream(messages: list[ChatMessage], system_addendum: str = "") -> Generator[str, None, None]:
     """Start a streaming completion and return a generator of text pieces.
 
     This is a normal function, not a generator: the request is sent, and any
@@ -123,7 +123,7 @@ def open_reply_stream(messages: list[ChatMessage]) -> Generator[str, None, None]
     then still answer with a proper HTTP status. Only the returned generator
     is lazy.
     """
-    client, kwargs = _build_request(messages)
+    client, kwargs = _build_request(messages, system_addendum)
     try:
         stream = client.chat.completions.create(**kwargs, stream=True)
     except OpenAIError as exc:

@@ -7,6 +7,8 @@ OpenAI-compatible chat model (OpenAI, or Groq via a base URL). Built as a learni
 - Chat UI with user/assistant bubbles, auto-scroll, and a typing indicator
 - Enter to send, Shift+Enter for a new line
 - Streaming replies: text appears as it is generated, with a Stop button
+- Chat with your documents (RAG): upload `.txt`, `.md` or `.pdf`; answers are grounded in the most relevant passages, with numbered citations you can expand. A "Use my documents" switch turns it on or off
+- Document library: files are split into chunks, embedded locally, stored in SQLite, and searchable on their own
 - Saved conversations (SQLite): a sidebar of past chats that survives refreshes and server restarts
 - Conversation context: follow-up questions work; the server loads the last 20 stored messages itself
 - Clear Chat (deletes the open conversation), error messages with a safe, duplicate-free Retry
@@ -21,6 +23,8 @@ OpenAI-compatible chat model (OpenAI, or Groq via a base URL). Built as a learni
 ```
 React UI → fetch → FastAPI (POST /conversations/{id}/messages/stream)
                       → Pydantic validation → SQLite (store message, load last 20)
+                      → [if "Use my documents"] embed the question → top passages above a
+                        relevance threshold → <sources> block in the user turn
                       → OpenAI SDK → model
         ←── SSE text pieces ←── (assistant reply saved when the stream ends) ←──┘
 ```
@@ -31,9 +35,12 @@ React UI → fetch → FastAPI (POST /conversations/{id}/messages/stream)
 | App state | `frontend/src/App.tsx` | Messages, loading, error, send/retry/clear |
 | API client | `frontend/src/services/` | `chatService.ts` (stream reader), `conversationService.ts` (CRUD), `http.ts` (errors) |
 | Sidebar | `frontend/src/components/Sidebar.tsx` | Saved chats, New chat, delete |
+| Documents panel | `frontend/src/components/DocumentsPanel.tsx` | Upload, list, delete, and a test search |
 | Routes | `backend/main.py`, `backend/routers/conversations.py` | HTTP endpoints, CORS, error → HTTP mapping |
 | Streaming | `backend/streaming.py` | Server-Sent Events framing, saves the reply however the stream ends |
-| Persistence | `backend/database.py`, `backend/models.py` | SQLAlchemy engine/sessions; `conversations` and `messages` tables |
+| Persistence | `backend/database.py`, `backend/models.py` | SQLAlchemy engine/sessions; `conversations`, `messages`, `documents`, `chunks` tables |
+| RAG | `backend/services/rag.py` | Retrieval threshold, prompt building, tag escaping |
+| Documents | `backend/routers/documents.py`, `services/chunking.py`, `services/embeddings.py`, `services/retrieval.py`, `services/documents.py` | Upload, text extraction, chunking, embeddings, similarity search |
 | Schemas | `backend/schemas.py` | Pydantic request/response models and limits |
 | AI service | `backend/services/openai_service.py` | SDK client, prompt, error classification |
 
@@ -123,6 +130,36 @@ pressed Stop or the connection failed midway.
 
 The title comes from the first message (first 50 characters). Context is the last 20 stored messages.
 
+**Answering from documents.** Add `"use_documents": true` to the message body (default `false`). The server then
+embeds the new question, keeps up to 4 passages scoring at least the relevance threshold, and the stream's
+**first** frame reports them before any text:
+```
+event: sources
+data: {"sources": [{"n": 1, "filename": "report.pdf", "position": 2, "score": 0.74, "text": "…"}]}
+```
+- An empty `sources` list means documents were searched and nothing was relevant; the model is told so and says the documents didn't cover it.
+- No `sources` frame at all means retrieval didn't run (the flag was off, or there are no documents).
+- The cited passages are saved with the answer (a snapshot, so they survive deleting the document), and `GET /conversations/{id}` returns them as `sources` on each assistant message.
+- If embeddings are unavailable the request fails with `503` before streaming; the user message stays saved, so turning the switch off and retrying works.
+
+### Documents (retrieval, Phase 12)
+| Method and path | Purpose | Success | Errors |
+|---|---|---|---|
+| `GET /documents` | List uploaded documents, newest first | 200 | none |
+| `POST /documents` | Upload one file (`multipart/form-data`, field `file`) | 201 | 413 too large, 415 wrong type, 409 library full, 422 unreadable or empty, 503 embedding model unavailable |
+| `DELETE /documents/{id}` | Delete a document and its chunks | 204 | 404 |
+| `POST /documents/search` | Top matching chunks for a query: `{"query": "...", "top_k": 4}` | 200 | 422, 503 |
+
+```bash
+curl -F "file=@notes.pdf" http://localhost:8000/documents
+curl -X POST http://localhost:8000/documents/search -H "Content-Type: application/json" \
+  -d '{"query":"what does the report say about costs?","top_k":3}'
+# [{"document_id":"…","filename":"notes.pdf","position":2,"text":"…","score":0.71}, …]
+```
+Search always returns the `top_k` best chunks, **however poor they are**. A low `score` means "not really related"; deciding what counts as relevant is the job of the next phase.
+
+Embeddings: the default is a small local model (`BAAI/bge-small-en-v1.5`, about 130 MB), downloaded once on the first upload or search into `backend/.model_cache/` and then fully offline. Chat can use Groq while embeddings stay local, because Groq has no embeddings API. `EMBEDDING_BACKEND=hashing` selects a built-in offline word-matching embedder for tests and development: it matches shared words, **not meaning**.
+
 ### `POST /chat` and `POST /chat/stream` (stateless)
 These take the whole history from the client and store nothing; they are the original Phase 6 and 10 endpoints.
 
@@ -177,7 +214,7 @@ source .venv/bin/activate
 pip install -r requirements-dev.txt
 pytest -q
 ```
-The 42 tests cover validation, error mapping, safe error messages, CORS, streaming (including mid-stream failure and cancellation), conversation storage, idempotent retry, cascade deletes, and that invalid input never reaches the model. Database tests use a throwaway SQLite file per test. See `docs/testing.md` for the manual end-to-end checklist.
+The 96 tests cover validation, error mapping, safe error messages, CORS, streaming (including mid-stream failure and cancellation), conversation storage, idempotent retry, cascade deletes, document upload (text, markdown, PDF, limits, filename safety), chunking, embedding failures, similarity ranking, RAG prompt building (relevance threshold, prompt-injection escaping, citations surviving retries and document deletion), and that invalid input never reaches the model. Database tests use a throwaway SQLite file per test. See `docs/testing.md` for the manual end-to-end checklist.
 
 ## Configuration and limits
 | Setting | Where | Default |
@@ -185,6 +222,11 @@ The 42 tests cover validation, error mapping, safe error messages, CORS, streami
 | Max characters per message | `backend/schemas.py`, `frontend/src/constants.ts` | 4000 |
 | Messages of context sent to the model | `backend/schemas.py` (`MAX_HISTORY_MESSAGES`) | 20 |
 | Database | `DATABASE_URL` in `.env` | `sqlite:///backend/chat.db` |
+| Upload limits | `backend/routers/documents.py` | 2 MB per file, 50 documents, 400 chunks per document |
+| Chunking | `backend/services/chunking.py` | 800 characters per chunk, 100 overlap |
+| Embeddings | `EMBEDDING_BACKEND`, `EMBEDDING_MODEL` in `.env` | `fastembed`, `BAAI/bge-small-en-v1.5` |
+| Relevance threshold | `RAG_MIN_SCORE` in `.env` | `0.5` for the default model (a starting point: tune it, see below) |
+| Passages per answer | `backend/services/rag.py` (`MAX_PASSAGES`) | 4 |
 | Max reply tokens | `backend/services/openai_service.py` | 800 |
 | Provider timeout / retries | `backend/services/openai_service.py` | 30 s / 2 |
 
@@ -197,13 +239,18 @@ To use PostgreSQL later, set `DATABASE_URL` (for example `postgresql+psycopg://u
 - Requests are size-limited to control cost and abuse.
 - The server decides the model's context from its own database. A client can't inject fake turns by sending history.
 - Message text is never written to the logs.
+- **Prompt injection from documents.** Retrieved text is untrusted: a document can contain "ignore your instructions". Passages are placed in the *user* turn inside a `<sources>` block (never in the system prompt), any `<sources>` tags inside them are escaped so a document can't close the block early, and the system prompt tells the model to treat the block as reference text only. This reduces the risk but cannot eliminate it: a model may still be influenced by text it reads. Don't index documents you don't trust, and never give the model tools or secrets that a document could talk it into misusing.
+- Uploaded files are processed in memory and never written to disk, so there is no path-traversal or disk-filling risk from them. The filename is only a display label (directories are stripped). Size, type, document-count and chunk-count limits bound storage and compute. Note that the web framework may buffer a very large request body before the 2 MB check runs, so in production also cap request size at the reverse proxy.
 - **There is no authentication yet.** Anyone who can reach the API can list, read and delete every conversation. That is fine for local use only. Before deploying, add user accounts and an ownership check on every `/conversations` route.
 - CORS allows only the local dev origins. Restrict `allow_origins` further for deployment.
 - If a key is ever pasted into chat, a log, or a commit, revoke it immediately and create a new one.
 
+### Tuning the relevance threshold
+Cosine scores are not probabilities and differ between models. The default `0.5` for `bge-small-en-v1.5` is a **starting guess**, not a measured value. Expand a citation to see its score, then adjust `RAG_MIN_SCORE`: too low and unrelated passages mislead the model; too high and real matches are dropped ("nothing relevant found"). Re-tune whenever you change the embedding model.
+
 ## Roadmap
-- Authentication and per-user conversations (required before any deployment)
-- Retrieval-augmented generation (RAG), planned
+- Authentication and per-user conversations and documents (required before any deployment)
+- Better retrieval: rewrite follow-up questions into standalone ones before searching, hybrid keyword + vector search, re-ranking, an indexed vector store for large libraries
 
 ## Learning guide
 - `docs/AI-Chat-Learning-Guide.html`: interactive walkthrough of how the app was built (Phases 1 to 9 concepts)

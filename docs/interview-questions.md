@@ -49,3 +49,17 @@
 1. Why should the server, not the client, own the conversation history, and what attacks or bugs does that prevent?
 2. How does sending a client-generated message id make retry safe (idempotent), and what would go wrong with a naive retry that just re-posts the message?
 3. Why SQLite for development with SQLAlchemy, what changes when you move to PostgreSQL, and what is missing before you could deploy this (authentication, ownership checks, migrations)?
+
+## Phase 12
+1. What is RAG and why does it exist? What problem does it solve that a bigger prompt or fine-tuning does not?
+2. How does chunking affect retrieval quality? Explain the trade-offs of chunk size and overlap.
+3. What is an embedding, why do we normalize vectors, and why is cosine similarity then just a dot product?
+4. Why does top-k search always return k results even when nothing is relevant, and how do you handle that?
+5. Why must documents be re-embedded if you change the embedding model, and how does this app protect against mixing them?
+
+## Phase 13
+1. Walk through what happens, step by step, when a user asks a question with RAG enabled. Where can quality be lost?
+2. What is prompt injection, why is retrieved text especially exposed to it, and what did this app do (and not do) about it?
+3. How do you choose a relevance threshold, and what goes wrong when it is too low or too high? How would you evaluate retrieval quality properly?
+4. Why store citations as a snapshot instead of a reference to the document, and what are the trade-offs?
+5. Why does a follow-up like "what about its price?" retrieve poorly, and how would you fix it (query rewriting, using conversation context)?
