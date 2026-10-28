@@ -22,6 +22,9 @@ class Embedder(Protocol):
     # Stored with every document. Vectors from different models are not
     # comparable, so search only looks at documents embedded by the current one.
     name: str
+    # Starting point for "is this passage relevant?" for this model's score scale.
+    # Scores are not comparable across models, so each one brings its own.
+    default_min_score: float
 
     def embed_documents(self, texts: list[str]) -> np.ndarray: ...
     def embed_query(self, text: str) -> np.ndarray: ...
@@ -39,6 +42,9 @@ class FastEmbedEmbedder:
 
     def __init__(self, model_name: str) -> None:
         self.name = f"fastembed:{model_name}"
+        # A starting guess for bge-small, whose scores are compressed (related text
+        # often 0.6 to 0.9, unrelated 0.3 to 0.5). Tune it with RAG_MIN_SCORE.
+        self.default_min_score = 0.5
         self._model_name = model_name
         self._model = None
 
@@ -84,6 +90,7 @@ class HashingEmbedder:
     """
 
     name = "hashing:384"
+    default_min_score = 0.05  # word overlap gives small cosines
     DIM = 384
     _STOP = frozenset("a an and are as at be by for from has have in is it its of on or that the this to was were will with".split())
 

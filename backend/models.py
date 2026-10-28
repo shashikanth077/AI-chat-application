@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -46,6 +46,31 @@ class Message(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
+    # Citations for an assistant answer. Loaded together with the message (one extra query).
+    sources: Mapped[list["MessageSource"]] = relationship(
+        back_populates="message", cascade="all, delete-orphan", order_by="MessageSource.n", lazy="selectin"
+    )
+
+
+class MessageSource(Base):
+    """A snapshot of one passage an answer was based on.
+
+    Copies the text (and has no foreign key to the document) so the citation
+    still shows what the answer relied on after the document is deleted.
+    """
+
+    __tablename__ = "message_sources"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    message_id: Mapped[int] = mapped_column(ForeignKey("messages.id", ondelete="CASCADE"), index=True)
+    n: Mapped[int] = mapped_column(Integer)  # the citation number the model saw: [1], [2], ...
+    document_id: Mapped[str | None] = mapped_column(String(36), default=None)
+    filename: Mapped[str] = mapped_column(String(255))
+    position: Mapped[int] = mapped_column(Integer)
+    score: Mapped[float] = mapped_column(Float)
+    text: Mapped[str] = mapped_column(Text)
+
+    message: Mapped[Message] = relationship(back_populates="sources")
 
 
 class Document(Base):
