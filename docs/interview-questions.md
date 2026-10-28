@@ -63,3 +63,11 @@
 3. How do you choose a relevance threshold, and what goes wrong when it is too low or too high? How would you evaluate retrieval quality properly?
 4. Why store citations as a snapshot instead of a reference to the document, and what are the trade-offs?
 5. Why does a follow-up like "what about its price?" retrieve poorly, and how would you fix it (query rewriting, using conversation context)?
+
+## Phase 14
+1. How do you render a model's markdown output without opening an XSS hole, and what does this app do beyond the library's defaults?
+2. A test showed every streamed token (and every citation click) rebuilt the whole rendered markdown. Why did that happen, and how was it fixed?
+3. Why is "always scroll to the bottom" bad chat UX, and how does the stick-to-bottom approach work?
+4. What does an accessible custom confirm dialog need, and why replace `window.confirm`?
+5. What did you test at each level of the frontend (unit, component, end-to-end), and what does each level catch that the others miss?
+6. The API returns timestamps without a timezone. What goes wrong in the browser, and how is it handled?

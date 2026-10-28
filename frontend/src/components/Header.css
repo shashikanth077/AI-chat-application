@@ -1,0 +1,96 @@
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 56px;
+  flex-shrink: 0;
+  padding: 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.header h1 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.menu-btn {
+  display: none;
+}
+
+/* Pill switch for "Use my documents" */
+.docs-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s;
+}
+.docs-switch:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+.docs-switch-track {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background 0.2s;
+}
+.docs-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s;
+}
+.docs-switch.on .docs-switch-track {
+  background: var(--accent);
+}
+.docs-switch.on .docs-switch-thumb {
+  transform: translateX(14px);
+}
+.docs-switch .short {
+  display: none;
+}
+
+@media (max-width: 820px) {
+  .menu-btn {
+    display: inline-grid;
+  }
+}
+@media (max-width: 640px) {
+  .header {
+    padding: 0 10px;
+    gap: 4px;
+  }
+  .docs-switch .long {
+    display: none;
+  }
+  .docs-switch .short {
+    display: inline;
+  }
+  .clear-btn span {
+    display: none;
+  }
+  .clear-btn {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+  }
+}

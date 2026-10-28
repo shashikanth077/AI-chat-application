@@ -1,32 +1,8 @@
-import type { Source } from '../types/chat';
+import { drainFrames, handleFrame } from './sse';
+import type { StreamHandlers, StreamState } from './sse';
 import { fetchOrThrow } from './http';
 
-export interface StreamHandlers {
-  onDelta: (text: string) => void;
-  // Sent once, before the first token, when the user's documents were searched.
-  onSources: (sources: Source[]) => void;
-}
-
-interface StreamState {
-  finished: boolean;
-}
-
-// One SSE frame looks like:  "event: error\ndata: {...}"  (event line optional).
-function handleFrame(frame: string, handlers: StreamHandlers, state: StreamState): void {
-  let event = 'message';
-  let data = '';
-  for (const line of frame.split('\n')) {
-    if (line.startsWith('event: ')) event = line.slice(7);
-    else if (line.startsWith('data: ')) data += line.slice(6);
-  }
-  if (!data) return;
-
-  const payload = JSON.parse(data) as { delta?: string; detail?: string; sources?: Source[] };
-  if (event === 'error') throw new Error(payload.detail ?? 'The response failed.');
-  if (event === 'done') state.finished = true;
-  else if (event === 'sources') handlers.onSources(payload.sources ?? []);
-  else if (payload.delta) handlers.onDelta(payload.delta);
-}
+export type { StreamHandlers };
 
 /**
  * Sends one new user message to a stored conversation and calls `handlers.onDelta`
@@ -66,11 +42,9 @@ export async function streamMessage(
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    let end: number;
-    while ((end = buffer.indexOf('\n\n')) !== -1) {
-      handleFrame(buffer.slice(0, end), handlers, state);
-      buffer = buffer.slice(end + 2);
-    }
+    const { frames, rest } = drainFrames(buffer);
+    buffer = rest;
+    for (const frame of frames) handleFrame(frame, handlers, state);
   }
 
   if (!state.finished) throw new Error('The response was interrupted. Please retry.');
