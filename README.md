@@ -206,5 +206,6 @@ To use PostgreSQL later, set `DATABASE_URL` (for example `postgresql+psycopg://u
 - Retrieval-augmented generation (RAG), planned
 
 ## Learning guide
-- `docs/AI-Chat-Learning-Guide.html`: interactive walkthrough of how the app was built
+- `docs/AI-Chat-Learning-Guide.html`: interactive walkthrough of how the app was built (Phases 1 to 9 concepts)
+- `docs/AI-Chat-Flows-Guide.html`: step-by-step sequence diagrams of every end-to-end flow in the current app (startup, send, streaming, Stop, failures and Retry, database, conversations, UI states, security, testing, endpoints)
 - `docs/AI-Chat-Interview-Guide.pdf`: all interview questions, with answers and diagrams
