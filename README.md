@@ -1,50 +1,120 @@
-# AI Chat Application
+<div align="center">
 
-A full-stack AI chat app: a React + TypeScript frontend talks to a FastAPI backend, which calls an
-OpenAI-compatible chat model (OpenAI, or Groq via a base URL). Built as a learning portfolio project.
+# AI Chat
 
-## Features
-- Polished chat UI: replies render as **markdown** (headings, lists, tables, code blocks with a copy button), with a welcome screen of suggested prompts, a typing indicator, and a streaming caret
-- Light and dark themes (follows your system until you choose; remembered)
-- Smart auto-scroll: follows the answer only while you're at the bottom, with a "jump to latest" button when you've scrolled up
-- Enter to send, Shift+Enter for a new line; the message box grows with your text
-- Streaming replies: text appears as it is generated, with a Stop button
-- Chat with your documents (RAG): upload `.txt`, `.md` or `.pdf`; answers are grounded in the most relevant passages, with numbered citations: click an inline `[1]` or a source chip to read the exact passage. A "Use my documents" switch turns it on or off
-- Document library: files are split into chunks, embedded locally, stored in SQLite, and searchable on their own
-- Saved conversations (SQLite): a sidebar of past chats, grouped by date (Today, Yesterday, …), that survives refreshes and server restarts
-- Conversation context: follow-up questions work; the server loads the last 20 stored messages itself
-- Clear Chat (deletes the open conversation), error messages with a safe, duplicate-free Retry
-- Input limits (4000 characters per message) shown with a live counter
-- Responsive layout: on phones the sidebar becomes a slide-in drawer; uploads also work by drag and drop
-- Accessible: keyboard-friendly, labelled controls, a real modal confirm dialog (focus trap, Escape) instead of the browser pop-up
-- Server-side validation with Pydantic; safe, mapped HTTP errors
-- API key kept on the backend and never logged or sent to the browser
-- Automated tests: 96 backend (pytest) and 71 frontend (Vitest), plus a CI workflow that runs both
+**A full-stack AI chat app: React + TypeScript streaming from FastAPI, with saved conversations and retrieval-augmented answers that cite your own documents.**
+
+[![CI](https://github.com/shashikanth077/ai-chat-application/actions/workflows/ci.yml/badge.svg)](https://github.com/shashikanth077/ai-chat-application/actions/workflows/ci.yml)
+![React](https://img.shields.io/badge/React_19-20232a?logo=react&logoColor=61dafb)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178c6?logo=typescript&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-003b57?logo=sqlite&logoColor=white)
+
+### [Try the live demo](https://shashikanth077.github.io/ai-chat-application/)
+
+<img src="docs/screenshots/chat-rag-dark.png" alt="A RAG answer with numbered citations and a source chip" width="900">
+
+</div>
+
+> The live demo is a **self-contained build**: the AI is simulated in your browser and your data never leaves it
+> (see [Demo mode](#demo-mode)). The full-stack version, with a real model behind FastAPI, runs from this repository in two commands.
+
+| | |
+|---|---|
+| <img src="docs/screenshots/welcome-dark.png" alt="Welcome screen"> | <img src="docs/screenshots/chat-markdown-dark.png" alt="Markdown, syntax-highlighted code and a table"> |
+| <img src="docs/screenshots/chat-light.png" alt="Light theme"> | <img src="docs/screenshots/mobile.png" alt="Mobile layout" width="300"> |
+
+## Highlights
+- **Streaming** replies over Server-Sent Events, with Stop (the partial answer is kept) and a safe, duplicate-free **Retry** and **Regenerate** built on idempotent message ids
+- **RAG with citations**: upload `.txt`, `.md` or `.pdf`; answers cite numbered passages, and a click opens the exact text and relevance score
+- **Safe markdown**: syntax-highlighted code, tables and lists. Raw HTML, images and `javascript:` links are rendered inert (covered by tests)
+- **Saved conversations** (SQLite), searchable, grouped by date, restored after a refresh; **export** any chat to Markdown
+- **Polish**: light/dark themes without a flash, collapsible sidebar, keyboard shortcuts, toasts, accessible modal and menus, responsive down to phones
+- **Engineering**: Pydantic validation, mapped HTTP errors, secrets never logged or sent to the browser, 237 automated tests and CI
+
+## Quick start (full stack)
+```bash
+# backend (needs an API key from any OpenAI-compatible provider, e.g. OpenAI or Groq)
+cd backend && python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt && cp .env.example .env     # add your key and model to .env
+uvicorn main:app --reload --port 8000
+
+# frontend, in a second terminal
+cd frontend && npm install && npm run dev                    # http://localhost:5173
+```
+Details are in [Setup](#setup). To run **without any API key or backend**, see [Demo mode](#demo-mode).
+
+## How it works
+
+```mermaid
+flowchart LR
+    UI["React UI<br/>streams, renders markdown"] -- "POST /conversations/{id}/messages/stream" --> API["FastAPI<br/>validates, retrieves"]
+    API --> DB[("SQLite<br/>conversations, chunks")]
+    API -- "embed question, top passages" --> RAG["RAG<br/>sources block"]
+    RAG --> LLM["OpenAI-compatible model"]
+    LLM -- "token stream" --> API
+    API -- "SSE: sources, deltas, done" --> UI
+```
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant S as FastAPI
+    participant D as SQLite
+    participant M as Model
+    B->>S: message + client_message_id + use_documents
+    S->>D: store the user message (once per id)
+    S->>D: search chunk vectors
+    S-->>B: event: sources (before any text)
+    S->>M: history + sources block
+    loop every token
+        M-->>S: delta
+        S-->>B: data: delta
+    end
+    S->>D: save the assistant reply and its citations
+    S-->>B: event: done
+```
+
+## Demo mode
+`VITE_DEMO=true` builds the frontend without a backend. A small in-browser stand-in (`frontend/src/demo/`) answers the same
+routes, so the real services, SSE parser and UI all run unchanged:
+
+- the "model" composes extractive answers from the retrieved passages (and a canned markdown showcase), streamed word by word
+- retrieval is a TypeScript port of the backend's chunking and offline hashing embedder, **tested for parity against output generated by the Python code**
+- conversations and uploads live in `localStorage`, so visitors never share data; uploads are limited to small `.txt`/`.md` files
+- sample documents are preloaded so "Use my documents" works on the first message
+
+This is what makes a public link safe: the real backend has **no authentication** and holds one shared database and your API key
+(see [Security notes](#security-notes)), so it should not be exposed as-is. Build and deploy the demo with `docs/DEPLOY.md`.
+
+```bash
+cd frontend
+VITE_DEMO=true npm run dev        # try it locally
+VITE_DEMO=true VITE_BASE=/ai-chat-application/ npm run build   # for GitHub Pages
+```
+
+## Keyboard shortcuts
+| Keys | Action |
+|---|---|
+| `Ctrl/Cmd` + `Shift` + `O` | New chat |
+| `Ctrl/Cmd` + `B` | Show or hide the sidebar |
+| `/` | Focus the message box |
+| `Esc` | Stop generating |
+| `Enter` / `Shift` + `Enter` | Send / new line |
 
 ## Architecture
 
-```
-React UI → fetch → FastAPI (POST /conversations/{id}/messages/stream)
-                      → Pydantic validation → SQLite (store message, load last 20)
-                      → [if "Use my documents"] embed the question → top passages above a
-                        relevance threshold → <sources> block in the user turn
-                      → OpenAI SDK → model
-        ←── SSE text pieces ←── (assistant reply saved when the stream ends) ←──┘
-```
-
 | Layer | Location | Responsibility |
 |---|---|---|
-| UI components | `frontend/src/components/` | Header, message list and bubbles, markdown renderer, composer, confirm dialog (each with its own CSS) |
-| Hooks and helpers | `frontend/src/hooks/`, `frontend/src/lib/` | Theme and confirm hooks; citation linking and date grouping (pure, unit-tested) |
-| App state | `frontend/src/App.tsx` | Messages, loading, error, send/retry/clear |
-| API client | `frontend/src/services/` | `chatService.ts` (stream reader), `conversationService.ts` (CRUD), `http.ts` (errors) |
-| Sidebar | `frontend/src/components/Sidebar.tsx` | Saved chats, New chat, delete |
-| Documents panel | `frontend/src/components/DocumentsPanel.tsx` | Upload, list, delete, and a test search |
-| Routes | `backend/main.py`, `backend/routers/conversations.py` | HTTP endpoints, CORS, error → HTTP mapping |
-| Streaming | `backend/streaming.py` | Server-Sent Events framing, saves the reply however the stream ends |
-| Persistence | `backend/database.py`, `backend/models.py` | SQLAlchemy engine/sessions; `conversations`, `messages`, `documents`, `chunks` tables |
-| RAG | `backend/services/rag.py` | Retrieval threshold, prompt building, tag escaping |
-| Documents | `backend/routers/documents.py`, `services/chunking.py`, `services/embeddings.py`, `services/retrieval.py`, `services/documents.py` | Upload, text extraction, chunking, embeddings, similarity search |
+| UI components | `frontend/src/components/` | Header, sidebar, message list and bubbles, markdown and code blocks, composer, modal, menu, about dialog |
+| Hooks and helpers | `frontend/src/hooks/`, `frontend/src/lib/` | Theme, toasts, shortcuts, confirm; citations, date grouping, highlighting, export (pure and unit-tested) |
+| App state | `frontend/src/App.tsx` | Messages, loading, error, send/retry/regenerate/clear |
+| API client | `frontend/src/services/` | `chatService.ts` (stream reader), `conversationService.ts`, `documentService.ts`, `http.ts` |
+| Demo backend | `frontend/src/demo/` | In-browser API stand-in, simulated assistant, client-side RAG |
+| Routes | `backend/main.py`, `backend/routers/` | HTTP endpoints, CORS, error mapping, `/info` |
+| Streaming | `backend/streaming.py` | SSE framing; saves the reply however the stream ends |
+| Persistence | `backend/database.py`, `backend/models.py` | SQLAlchemy; `conversations`, `messages`, `message_sources`, `documents`, `chunks` |
+| RAG | `backend/services/` | `chunking`, `embeddings`, `retrieval`, `rag` (threshold, prompt building, tag escaping) |
 | Schemas | `backend/schemas.py` | Pydantic request/response models and limits |
 | AI service | `backend/services/openai_service.py` | SDK client, prompt, error classification |
 
@@ -52,14 +122,14 @@ React UI → fetch → FastAPI (POST /conversations/{id}/messages/stream)
 ```
 AI-chat-application/
 ├── frontend/          React + TypeScript + Vite
-│   └── src/ (components/, hooks/, lib/, services/, types/, test/, App.tsx, main.tsx)
+│   ├── src/ (components/, hooks/, lib/, services/, demo/, types/, test/)
+│   └── e2e/smoke.cjs  Playwright smoke test (see Testing)
 ├── backend/           FastAPI + Pydantic + OpenAI SDK
 │   ├── main.py  schemas.py  database.py  models.py  streaming.py
-│   ├── routers/conversations.py   services/openai_service.py
-│   ├── tests/         pytest suite (provider mocked)
-│   ├── requirements.txt  requirements-dev.txt
-│   └── .env.example
-└── docs/              testing guide, learning guide, interview questions
+│   ├── routers/  services/  tests/  tools/
+│   └── requirements.txt  requirements-dev.txt  .env.example
+├── .github/workflows/ ci.yml (tests) and deploy-demo.yml (GitHub Pages)
+└── docs/              screenshots, DEPLOY.md, testing guide, learning guides, interview questions
 ```
 
 ## Prerequisites
@@ -95,9 +165,12 @@ npm install
 npm run dev                        # http://localhost:5173
 ```
 
-Optional: set `VITE_API_URL` in `frontend/.env` if the backend isn't at `http://localhost:8000`.
+Optional: set `VITE_API_URL` in `frontend/.env` if the backend isn't at `http://localhost:8000`. If the frontend is served from another origin, list it in the backend's `CORS_ORIGINS` (comma-separated).
 
 ## API
+
+### `GET /info`
+Public, non-secret deployment facts used by the About dialog and the model chip: app version, model name, the provider's **host** only, embedding backend, and limits. It never includes the API key or URL path.
 
 ### `GET /health`
 ```bash
@@ -126,6 +199,8 @@ curl -N -X POST http://localhost:8000/conversations/$ID/messages/stream \
   -d '{"content":"What is my name?","client_message_id":"msg-00000002"}'   # answers from stored context
 curl -s http://localhost:8000/conversations/$ID
 ```
+
+Each stored message includes `client_id` (the id the client sent for a user message), so a chat restored after a refresh can still be regenerated.
 
 `client_message_id` (8 to 64 characters, generated by the client per message) makes sending **idempotent**:
 sending the same id again is a retry. The message is not stored twice, and any partial answer that followed
@@ -220,16 +295,23 @@ source .venv/bin/activate
 pip install -r requirements-dev.txt
 pytest -q
 ```
-The 96 tests cover validation, error mapping, safe error messages, CORS, streaming (including mid-stream failure and cancellation), conversation storage, idempotent retry, cascade deletes, document upload (text, markdown, PDF, limits, filename safety), chunking, embedding failures, similarity ranking, RAG prompt building (relevance threshold, prompt-injection escaping, citations surviving retries and document deletion), and that invalid input never reaches the model. Database tests use a throwaway SQLite file per test. See `docs/testing.md` for the manual end-to-end checklist.
+The 103 tests cover validation, error mapping, safe error messages, CORS, streaming (including mid-stream failure and cancellation), conversation storage, idempotent retry, cascade deletes, document upload (text, markdown, PDF, limits, filename safety), chunking, embedding failures, similarity ranking, RAG prompt building (relevance threshold, prompt-injection escaping, citations surviving retries and document deletion), and that invalid input never reaches the model. Database tests use a throwaway SQLite file per test. See `docs/testing.md` for the manual end-to-end checklist.
 
 ### Frontend
 ```bash
 cd frontend
 npm install
-npm test            # 71 tests (Vitest + Testing Library)
+npm test            # 134 tests (Vitest + Testing Library)
 npm run lint && npx tsc -b && npm run build
 ```
 The tests cover the pieces that are easy to get subtly wrong: the SSE frame parser (frames split across network reads, newlines in text, error and sources frames), citation linking (never inside code, never for a source that doesn't exist), date grouping (including the API's timezone-less UTC timestamps), the composer (Enter vs Shift+Enter, IME composition, Stop), **markdown safety** (script, image, iframe and `javascript:` payloads rendered inert), citations (open, close, chips), the confirm dialog (focus, Escape, focus trap), the sidebar, the documents panel (validation, drag and drop, delete confirmation), the theme hook, and a regression test that streamed text updates the existing DOM instead of rebuilding it.
+
+### End-to-end smoke test
+`frontend/e2e/smoke.cjs` drives a real browser through send, regenerate, refresh, export, shortcuts, About, search and citations. It needs Playwright (`npm i -g playwright`) and a running app:
+```bash
+NODE_PATH=$(npm root -g) node frontend/e2e/smoke.cjs http://localhost:5173          # full stack
+NODE_PATH=$(npm root -g) node frontend/e2e/smoke.cjs http://localhost:4173/ai-chat-application/ demo   # demo build (vite preview)
+```
 
 ### Continuous integration
 `.github/workflows/ci.yml` runs the backend tests and the frontend lint, type-check, tests and build on every push and pull request. The tests need no API keys, network access or model download.
@@ -237,6 +319,7 @@ The tests cover the pieces that are easy to get subtly wrong: the SSE frame pars
 ## Configuration and limits
 | Setting | Where | Default |
 |---|---|---|
+| Allowed browser origins | `CORS_ORIGINS` in `.env` (comma-separated) | `http://localhost:5173`, `http://127.0.0.1:5173` |
 | Max characters per message | `backend/schemas.py`, `frontend/src/constants.ts` | 4000 |
 | Messages of context sent to the model | `backend/schemas.py` (`MAX_HISTORY_MESSAGES`) | 20 |
 | Database | `DATABASE_URL` in `.env` | `sqlite:///backend/chat.db` |
@@ -261,11 +344,14 @@ To use PostgreSQL later, set `DATABASE_URL` (for example `postgresql+psycopg://u
 - **Prompt injection from documents.** Retrieved text is untrusted: a document can contain "ignore your instructions". Passages are placed in the *user* turn inside a `<sources>` block (never in the system prompt), any `<sources>` tags inside them are escaped so a document can't close the block early, and the system prompt tells the model to treat the block as reference text only. This reduces the risk but cannot eliminate it: a model may still be influenced by text it reads. Don't index documents you don't trust, and never give the model tools or secrets that a document could talk it into misusing.
 - Uploaded files are processed in memory and never written to disk, so there is no path-traversal or disk-filling risk from them. The filename is only a display label (directories are stripped). Size, type, document-count and chunk-count limits bound storage and compute. Note that the web framework may buffer a very large request body before the 2 MB check runs, so in production also cap request size at the reverse proxy.
 - **There is no authentication yet.** Anyone who can reach the API can list, read and delete every conversation. That is fine for local use only. Before deploying, add user accounts and an ownership check on every `/conversations` route.
-- CORS allows only the local dev origins. Restrict `allow_origins` further for deployment.
+- CORS allows only the local dev origins unless you set `CORS_ORIGINS` to your frontend's origin(s). A wildcard is logged as a warning.
 - If a key is ever pasted into chat, a log, or a commit, revoke it immediately and create a new one.
 
 ### Tuning the relevance threshold
 Cosine scores are not probabilities and differ between models. The default `0.5` for `bge-small-en-v1.5` is a **starting guess**, not a measured value. Expand a citation to see its score, then adjust `RAG_MIN_SCORE`: too low and unrelated passages mislead the model; too high and real matches are dropped ("nothing relevant found"). Re-tune whenever you change the embedding model.
+
+## Deploying
+See [`docs/DEPLOY.md`](docs/DEPLOY.md): the demo on GitHub Pages (safe to make public) and the full stack on a host of your choice (add authentication first).
 
 ## Roadmap
 - Authentication and per-user conversations and documents (required before any deployment)

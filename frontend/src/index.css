@@ -2,66 +2,67 @@
    sets before first paint (and useTheme keeps in sync), so there is no flash. */
 :root {
   color-scheme: light;
-  --bg: #f6f7fb;
+  --bg: #f5f5f9;
   --surface: #ffffff;
-  --surface-2: #f1f3f8;
-  --surface-3: #e6e9f1;
-  --border: #e3e6ee;
-  --border-strong: #cdd3e0;
-  --text: #161a25;
-  --text-2: #394053;
-  --muted: #667085;
-  --accent: #4f46e5;
-  --accent-hover: #4338ca;
-  --accent-soft: #eceefe;
+  --surface-2: #f0f0f6;
+  --surface-3: #e4e4ee;
+  --sidebar: #fbfbfe;
+  --border: #e5e5ee;
+  --border-strong: #d1d1de;
+  --text: #0d0e14;
+  --text-2: #383a4a;
+  --muted: #686b7e;
+  --accent: #5b5bf0;
+  --accent-hover: #4a4ad8;
+  --accent-soft: #ededfd;
+  --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 58%, #a855f7 100%);
+  --glow: rgba(99, 102, 241, 0.13);
   --on-accent: #ffffff;
   --danger: #c62828;
   --danger-hover: #a61e1e;
   --danger-soft: #fdecec;
   --ok: #12805c;
-  --warn: #8a5206;
-  --warn-soft: #fdf3e2;
-  --code-bg: #0f1420;
-  --code-fg: #e6e9f0;
-  --code-head: #1a2133;
+  --code-bg: #0e1118;
+  --code-fg: #e4e7f1;
+  --code-head: #181c27;
   --radius-sm: 8px;
   --radius: 12px;
   --radius-lg: 18px;
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
-  --shadow: 0 6px 20px rgba(16, 24, 40, 0.08);
-  --shadow-lg: 0 18px 50px rgba(16, 24, 40, 0.22);
-  --sidebar-w: 288px;
+  --shadow-sm: 0 1px 2px rgba(20, 20, 40, 0.06);
+  --shadow: 0 1px 2px rgba(20, 20, 40, 0.05), 0 8px 24px rgba(20, 20, 40, 0.07);
+  --shadow-lg: 0 24px 64px rgba(20, 20, 40, 0.22);
+  --sidebar-w: 292px;
   --content-w: 780px;
-  --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --font: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #0c1018;
-  --surface: #141a26;
-  --surface-2: #1b2331;
-  --surface-3: #263044;
-  --border: #252f42;
-  --border-strong: #36435b;
-  --text: #e8ebf3;
-  --text-2: #c4cada;
-  --muted: #8e99ae;
-  --accent: #818cf8;
-  --accent-hover: #9aa4fa;
-  --accent-soft: #1d2447;
-  --on-accent: #0c1018;
+  --bg: #090a0f;
+  --surface: #12131b;
+  --surface-2: #181a24;
+  --surface-3: #242736;
+  --sidebar: #0d0e14;
+  --border: #212331;
+  --border-strong: #313447;
+  --text: #ececf3;
+  --text-2: #c2c4d3;
+  --muted: #8a8ea3;
+  --accent: #8d8eff;
+  --accent-hover: #a6a7ff;
+  --accent-soft: #1b1c3b;
+  --glow: rgba(139, 140, 255, 0.15);
+  --on-accent: #0b0c12;
   --danger: #f87171;
   --danger-hover: #fca5a5;
   --danger-soft: #3a1c22;
   --ok: #4ade80;
-  --warn: #fbbf24;
-  --warn-soft: #352a12;
-  --code-bg: #0a0e16;
-  --code-head: #151c2a;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.6);
+  --code-bg: #07080c;
+  --code-head: #11131b;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 28px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.65);
 }
 
 *,
@@ -81,6 +82,8 @@ body {
   font-family: var(--font);
   font-size: 15px;
   line-height: 1.55;
+  font-feature-settings: 'cv11', 'ss01';
+  letter-spacing: -0.005em;
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
@@ -127,13 +130,14 @@ textarea {
   opacity: 0.5;
 }
 .btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
+  background: var(--accent-gradient);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(80, 70, 200, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 .btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  background: var(--accent-gradient);
+  filter: brightness(1.08);
 }
 .btn-danger {
   background: var(--danger);
@@ -188,4 +192,18 @@ textarea {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  text-align: center;
 }

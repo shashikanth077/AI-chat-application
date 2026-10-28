@@ -1,0 +1,45 @@
+.menu {
+  position: relative;
+}
+.menu-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  min-width: 230px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  animation: menu-in 0.14s ease-out;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  font-size: 0.9rem;
+  text-align: left;
+}
+.menu-item svg {
+  color: var(--muted);
+}
+.menu-item:hover:not(:disabled),
+.menu-item:focus-visible {
+  background: var(--surface-2);
+  outline: none;
+}
+.menu-item:disabled {
+  opacity: 0.45;
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}

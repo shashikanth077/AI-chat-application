@@ -9,43 +9,44 @@ import {
   listConversations,
 } from './services/conversationService';
 import { isAbortError } from './services/http';
-import { MessageList } from './components/MessageList';
+import { AboutDialog } from './components/AboutDialog';
 import { ChatInput } from './components/ChatInput';
 import { Header } from './components/Header';
+import { MessageList } from './components/MessageList';
 import { Sidebar } from './components/Sidebar';
+import { DEMO } from './config';
+import { DemoBanner } from './components/DemoBanner';
 import { useConfirm } from './hooks/useConfirm';
+import { useInfo } from './hooks/useInfo';
+import { useShortcuts } from './hooks/useShortcuts';
 import { useTheme } from './hooks/useTheme';
+import { useToast } from './hooks/useToast';
+import { downloadText, slugify, toMarkdown } from './lib/export';
 import './App.css';
 
 const ACTIVE_KEY = 'activeConversationId';
 const DOCS_KEY = 'useDocuments';
+const COLLAPSED_KEY = 'sidebarCollapsed';
 
 // localStorage can throw (private mode, blocked storage); it is only a convenience.
-function readStoredId(): string | null {
+function readStored(key: string): string | null {
   try {
-    return localStorage.getItem(ACTIVE_KEY);
+    return localStorage.getItem(key);
   } catch {
     return null;
   }
 }
-function writeStoredId(id: string | null): void {
+function writeStored(key: string, value: string | null): void {
   try {
-    if (id) localStorage.setItem(ACTIVE_KEY, id);
-    else localStorage.removeItem(ACTIVE_KEY);
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
   } catch {
     /* ignore */
   }
 }
 
-function readUseDocuments(): boolean {
-  try {
-    return localStorage.getItem(DOCS_KEY) !== 'false'; // on unless the user turned it off
-  } catch {
-    return true;
-  }
-}
-
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.');
+const isMobile = () => window.matchMedia('(max-width: 820px)').matches;
 
 type StartStream = (handlers: StreamHandlers, signal: AbortSignal) => Promise<void>;
 
@@ -54,11 +55,17 @@ function App() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  // True from the start when a chat will be reopened, so the welcome screen doesn't flash first.
+  const [opening, setOpening] = useState(() => readStored(ACTIVE_KEY) !== null);
   const [error, setError] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [useDocuments, setUseDocuments] = useState(readUseDocuments);
+  const [sidebarOpen, setSidebarOpen] = useState(false); // mobile drawer
+  const [collapsed, setCollapsed] = useState(() => readStored(COLLAPSED_KEY) === 'true'); // desktop
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [useDocuments, setUseDocuments] = useState(() => readStored(DOCS_KEY) !== 'false'); // on unless turned off
   const { theme, toggle: toggleTheme } = useTheme();
   const { confirm, dialog } = useConfirm();
+  const toast = useToast();
+  const info = useInfo();
 
   // Lets the Stop button cancel the in-flight request.
   const abortRef = useRef<AbortController | null>(null);
@@ -78,14 +85,16 @@ function App() {
   const openConversation = async (id: string) => {
     const seq = ++openSeq.current;
     setError(null);
+    setOpening(true);
     try {
       const detail = await getConversation(id);
       if (seq !== openSeq.current) return;
       setActiveId(id);
-      writeStoredId(id);
+      writeStored(ACTIVE_KEY, id);
       setMessages(
         detail.messages.map((m) => ({
-          id: `db-${m.id}`,
+          // A user message keeps the id the client generated for it, so "regenerate" works after a refresh.
+          id: m.role === 'user' && m.client_id ? m.client_id : `db-${m.id}`,
           role: m.role,
           content: m.content,
           sources: m.sources.length > 0 ? m.sources : undefined,
@@ -94,19 +103,22 @@ function App() {
       setSidebarOpen(false);
     } catch (e) {
       if (seq === openSeq.current) setError(messageOf(e));
+    } finally {
+      if (seq === openSeq.current) setOpening(false);
     }
   };
 
   const startNewChat = () => {
     openSeq.current++;
+    setOpening(false);
     setActiveId(null);
-    writeStoredId(null);
+    writeStored(ACTIVE_KEY, null);
     setMessages([]);
     setError(null);
     setSidebarOpen(false);
   };
 
-  // On first load: fetch saved chats and reopen the one that was open before.
+  // On first load: fetch saved chats and reopen the one this browser had open (a new visitor starts on the welcome screen).
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -114,10 +126,14 @@ function App() {
         const list = await listConversations();
         if (cancelled) return;
         setConversations(list);
-        const target = list.find((c) => c.id === readStoredId()) ?? list[0];
+        const target = list.find((c) => c.id === readStored(ACTIVE_KEY));
         if (target) await openConversation(target.id);
+        else setOpening(false);
       } catch (e) {
-        if (!cancelled) setError(messageOf(e));
+        if (!cancelled) {
+          setError(messageOf(e));
+          setOpening(false);
+        }
       }
     })();
     return () => {
@@ -126,7 +142,7 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
 
-  // Shared by send and retry: stream a reply into the list.
+  // Shared by send, retry and regenerate: stream a reply into the list.
   const requestReply = async (start: StartStream) => {
     setError(null);
     setLoading(true);
@@ -183,7 +199,7 @@ function App() {
         const created = await createConversation();
         id = created.id;
         setActiveId(id);
-        writeStoredId(id);
+        writeStored(ACTIVE_KEY, id);
         setConversations((prev) => [created, ...prev]);
       } catch (e) {
         setError(messageOf(e));
@@ -201,28 +217,35 @@ function App() {
     );
   };
 
-  // Retry re-sends the last user message with the same id. The server already
-  // has it (or stores it now) and replaces any partial answer that followed.
-  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-  const handleRetry =
-    activeId && lastUser
-      ? () => {
-          const lastIndex = messages.findIndex((m) => m.id === lastUser.id);
-          setMessages(messages.slice(0, lastIndex + 1)); // drop the partial bubble
-          void requestReply((handlers, signal) =>
-            streamMessage(activeId, lastUser.id, lastUser.content, useDocuments, handlers, signal),
-          );
-        }
-      : undefined;
+  // Retry (after an error) and Regenerate (a fresh answer) are the same operation: re-send the last
+  // user message with its original id. The server already has it and replaces whatever followed.
+  const lastUserIndex = messages.map((m) => m.role).lastIndexOf('user');
+  const lastUser = lastUserIndex === -1 ? undefined : messages[lastUserIndex];
+  // Messages from before the id was stored can't be re-sent (their id is only a placeholder).
+  const canResend = Boolean(activeId && lastUser && !lastUser.id.startsWith('db-'));
+  const resendLast = () => {
+    if (!activeId || !lastUser) return;
+    setMessages(messages.slice(0, lastUserIndex + 1)); // drop the old answer from the screen
+    void requestReply((handlers, signal) =>
+      streamMessage(activeId, lastUser.id, lastUser.content, useDocuments, handlers, signal),
+    );
+  };
 
   const handleStop = () => abortRef.current?.abort();
 
   const toggleDocuments = (on: boolean) => {
     setUseDocuments(on);
-    try {
-      localStorage.setItem(DOCS_KEY, String(on));
-    } catch {
-      /* ignore */
+    writeStored(DOCS_KEY, String(on));
+  };
+
+  const toggleSidebar = () => {
+    if (isMobile()) {
+      setSidebarOpen((open) => !open);
+    } else {
+      setCollapsed((current) => {
+        writeStored(COLLAPSED_KEY, String(!current));
+        return !current;
+      });
     }
   };
 
@@ -239,49 +262,79 @@ function App() {
       await deleteConversation(id);
       setConversations((prev) => prev.filter((c) => c.id !== id));
       if (id === activeId) startNewChat();
+      toast.show('Conversation deleted');
     } catch (e) {
       setError(messageOf(e));
     }
   };
 
-  // "Clear Chat" removes the open conversation; with none open it just resets.
+  // "Clear chat" removes the open conversation; with none open it just resets.
   const handleClear = () => (activeId ? void handleDelete(activeId) : startNewChat());
 
   const activeTitle = conversations.find((c) => c.id === activeId)?.title ?? 'New chat';
 
+  const handleExport = () => {
+    downloadText(`${slugify(activeTitle)}.md`, toMarkdown(activeTitle, messages));
+    toast.show('Chat exported as Markdown');
+  };
+
+  useShortcuts({
+    newChat: () => !loading && startNewChat(),
+    toggleSidebar,
+    focusComposer: () => document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus(),
+    stop: handleStop,
+  });
+
+  const lastMessage = messages[messages.length - 1];
+  const canRegenerate = canResend && !loading && !error && lastMessage?.role === 'assistant';
+
   return (
-    <div className="shell">
+    <div className={`shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
       <Sidebar
         conversations={conversations}
         activeId={activeId}
         disabled={loading}
         open={sidebarOpen}
+        collapsed={collapsed}
         onNewChat={startNewChat}
         onSelect={(id) => void openConversation(id)}
         onDelete={(id) => void handleDelete(id)}
         onClose={() => setSidebarOpen(false)}
+        onAbout={() => setAboutOpen(true)}
       />
       <main className="app">
+        {DEMO && <DemoBanner />}
         <Header
           title={activeTitle}
+          model={info?.model ?? null}
+          provider={info?.provider ?? null}
           useDocuments={useDocuments}
           onToggleDocuments={toggleDocuments}
           theme={theme}
           onToggleTheme={toggleTheme}
-          onOpenSidebar={() => setSidebarOpen(true)}
+          onToggleSidebar={toggleSidebar}
+          sidebarVisible={isMobile() ? sidebarOpen : !collapsed}
           onClear={handleClear}
           clearDisabled={loading || (messages.length === 0 && !activeId)}
+          onExport={handleExport}
+          exportDisabled={messages.length === 0}
+          onAbout={() => setAboutOpen(true)}
         />
         <MessageList
           messages={messages}
           loading={loading}
+          opening={opening}
+          searching={useDocuments}
           error={error}
-          onRetry={handleRetry}
+          demo={DEMO}
+          onRetry={error && canResend ? resendLast : undefined}
+          onRegenerate={canRegenerate ? resendLast : undefined}
           onSuggest={(prompt) => void handleSend(prompt)}
         />
         <ChatInput disabled={loading} onSend={(t) => void handleSend(t)} onStop={handleStop} />
       </main>
       {dialog}
+      {aboutOpen && <AboutDialog info={info} demo={DEMO} onClose={() => setAboutOpen(false)} />}
     </div>
   );
 }

@@ -4,28 +4,20 @@ import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { citationNumber, linkCitations } from '../lib/citations';
-import { CopyButton } from './CopyButton';
+import { CodeBlock } from './CodeBlock';
 
-function codeInfo(children: ReactNode): { text: string; language: string } {
+function codeInfo(children: ReactNode): { text: string; language: string; element: ReactNode } {
   const child = Array.isArray(children) ? children[0] : children;
   if (isValidElement<{ className?: string; children?: ReactNode }>(child)) {
     const language = /language-([\w+-]+)/.exec(child.props.className ?? '')?.[1] ?? '';
-    return { text: String(child.props.children ?? '').replace(/\n$/, ''), language };
+    return { text: String(child.props.children ?? '').replace(/\n$/, ''), language, element: child };
   }
-  return { text: '', language: '' };
+  return { text: '', language: '', element: children };
 }
 
-function CodeBlock({ children }: { children?: ReactNode }) {
-  const { text, language } = codeInfo(children);
-  return (
-    <div className="codeblock">
-      <div className="codeblock-head">
-        <span>{language || 'code'}</span>
-        <CopyButton text={text} label="Copy code" showLabel />
-      </div>
-      <pre>{children}</pre>
-    </div>
-  );
+function Block({ children }: { children?: ReactNode }) {
+  const { text, language, element } = codeInfo(children);
+  return <CodeBlock text={text} language={language} fallback={element} />;
 }
 
 interface Props {
@@ -58,7 +50,7 @@ export const Markdown = memo(function Markdown({ text, sourceCount, onCite }: Pr
           </a>
         );
       },
-      pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
+      pre: ({ children }) => <Block>{children}</Block>,
       table: ({ children }) => (
         <div className="table-wrap">
           <table>{children}</table>

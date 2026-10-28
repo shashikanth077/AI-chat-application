@@ -27,6 +27,8 @@ function setup(props: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
       activeId="b"
       disabled={false}
       open={false}
+      collapsed={false}
+      onAbout={vi.fn()}
       {...handlers}
       {...props}
     />,
@@ -72,5 +74,28 @@ describe('Sidebar', () => {
     expect(h.onClose).toHaveBeenCalledOnce();
     await userEvent.click(within(screen.getByRole('complementary')).getByRole('button', { name: 'Close sidebar' }));
     expect(h.onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('filters chats by title as you type', async () => {
+    setup();
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search chats' }), 'python');
+    expect(screen.getByRole('button', { name: 'Python tips' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Old idea' })).not.toBeInTheDocument();
+    await userEvent.clear(screen.getByRole('searchbox'));
+    await userEvent.type(screen.getByRole('searchbox'), 'zzz');
+    expect(screen.getByText(/No chats match/)).toBeInTheDocument();
+  });
+
+  it('always shows the GitHub link and an About button', async () => {
+    const onAbout = vi.fn();
+    setup({ onAbout });
+    expect(screen.getByRole('link', { name: /GitHub/ })).toHaveAttribute('rel', 'noopener noreferrer');
+    await userEvent.click(screen.getByRole('button', { name: /About/ }));
+    expect(onAbout).toHaveBeenCalledOnce();
+  });
+
+  it('when collapsed on desktop, hides itself from keyboard and screen readers', () => {
+    setup({ collapsed: true });
+    expect(screen.getByLabelText('Sidebar', { selector: 'aside' })).toHaveAttribute('inert');
   });
 });

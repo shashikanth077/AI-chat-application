@@ -28,6 +28,7 @@ export interface StoredMessage {
   id: number;
   role: Role;
   content: string;
+  client_id: string | null; // the id the client generated for a user message
   sources: Source[];
 }
 
