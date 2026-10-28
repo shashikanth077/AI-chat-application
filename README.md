@@ -158,7 +158,7 @@ curl -X POST http://localhost:8000/documents/search -H "Content-Type: applicatio
 ```
 Search always returns the `top_k` best chunks, **however poor they are**. A low `score` means "not really related"; deciding what counts as relevant is the job of the next phase.
 
-Embeddings: the default is a small local model (`BAAI/bge-small-en-v1.5`, about 130 MB), downloaded once on the first upload or search into `backend/.model_cache/` and then fully offline. Chat can use Groq while embeddings stay local, because Groq has no embeddings API. `EMBEDDING_BACKEND=hashing` selects a built-in offline word-matching embedder for tests and development: it matches shared words, **not meaning**.
+Embeddings: the default is a small local model (`BAAI/bge-small-en-v1.5`, about 130 MB), downloaded once on the first upload or search into `backend/.model_cache/` and then fully offline. Chat can use Groq while embeddings stay local, because Groq has no embeddings API. `EMBEDDING_BACKEND=hashing` selects a built-in offline word-matching embedder for tests and development: it matches shared words, **not meaning**, and because it hashes words into 384 buckets it can occasionally give unrelated text a non-zero score (a hash collision).
 
 ### `POST /chat` and `POST /chat/stream` (stateless)
 These take the whole history from the client and store nothing; they are the original Phase 6 and 10 endpoints.
@@ -255,4 +255,5 @@ Cosine scores are not probabilities and differ between models. The default `0.5`
 ## Learning guide
 - `docs/AI-Chat-Learning-Guide.html`: interactive walkthrough of how the app was built (Phases 1 to 9 concepts)
 - `docs/AI-Chat-Flows-Guide.html`: step-by-step sequence diagrams of every end-to-end flow in the current app (startup, send, streaming, Stop, failures and Retry, database, conversations, UI states, security, testing, endpoints)
-- `docs/AI-Chat-Interview-Guide.pdf`: all interview questions, with answers and diagrams
+- `docs/AI-Chat-RAG-Flows-Guide.html`: the same style of guide for documents and RAG (upload and indexing, search and thresholds, answering with citations), with live labs for chunking, scoring, and prompt building
+- `docs/AI-Chat-Interview-Guide.pdf`: all 43 interview questions (Phases 1 to 13), with answers and diagrams
