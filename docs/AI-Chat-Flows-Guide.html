@@ -1,0 +1,1099 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Chat App: End-to-End Flows</title>
+<style>
+  :root {
+    --bg: #f5f6fa; --surface: #ffffff; --text: #1d2330; --muted: #5b6474;
+    --line: #e2e6ee; --accent: #2563eb; --accent-soft: #e8efff;
+    --c-user: #64748b; --c-ui: #0e8fb0; --c-api: #7c3aed; --c-db: #15803d; --c-ai: #b45309; --c-env: #be185d;
+    --danger: #b91c1c; --danger-soft: #fee2e2; --ok: #15803d; --ok-soft: #dcfce7; --warn-soft: #fef3c7;
+    --code-bg: #0b1020; --code-fg: #e6e9f0; --on-accent: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1420; --surface: #171e2d; --text: #e6e9f0; --muted: #9aa4b5;
+      --line: #2a3347; --accent: #6ea8ff; --accent-soft: #1d2a47;
+      --c-user: #94a3b8; --c-ui: #38c8e6; --c-api: #a78bfa; --c-db: #4ade80; --c-ai: #fbbf24; --c-env: #f472b6;
+      --danger: #f87171; --danger-soft: #3b1d22; --ok: #4ade80; --ok-soft: #14301f; --warn-soft: #3a2f12; --on-accent: #0b1020;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1420; --surface: #171e2d; --text: #e6e9f0; --muted: #9aa4b5;
+    --line: #2a3347; --accent: #6ea8ff; --accent-soft: #1d2a47;
+    --c-user: #94a3b8; --c-ui: #38c8e6; --c-api: #a78bfa; --c-db: #4ade80; --c-ai: #fbbf24; --c-env: #f472b6;
+    --danger: #f87171; --danger-soft: #3b1d22; --ok: #4ade80; --ok-soft: #14301f; --warn-soft: #3a2f12; --on-accent: #0b1020;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  header.top { position: sticky; top: 0; z-index: 30; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .top-inner { max-width: 1200px; margin: 0 auto; padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .top h1 { font-size: 1rem; margin: 0; white-space: nowrap; }
+  nav.tabs { display: flex; gap: 6px; overflow-x: auto; flex: 1; min-width: 0; padding-bottom: 2px; }
+  nav.tabs button { white-space: nowrap; }
+  button { font: inherit; font-size: 0.9rem; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--text); padding: 5px 11px; border-radius: 8px; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .step:focus { outline: none; }
+  .step:focus-visible .hit { stroke: var(--accent); stroke-width: 2px; }
+  main { max-width: 1200px; margin: 0 auto; padding: 22px 16px 90px; }
+  section.panel { display: none; }
+  section.panel.active { display: block; }
+  h2 { font-size: 1.5rem; margin: 0 0 4px; }
+  h3 { margin: 0 0 8px; font-size: 1.05rem; }
+  .lead { color: var(--muted); margin: 0 0 18px; max-width: 80ch; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; min-width: 0; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .86em; }
+  code { background: var(--accent-soft); padding: 1px 6px; border-radius: 5px; overflow-wrap: anywhere; }
+  pre { background: var(--code-bg); color: var(--code-fg); padding: 12px; border-radius: 10px; overflow-x: auto; font-size: .82rem; line-height: 1.5; margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .pill { display: inline-block; font-size: .72rem; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); margin-right: 6px; }
+  .note { border-left: 3px solid var(--c-ai); padding: 8px 12px; background: var(--warn-soft); border-radius: 0 8px 8px 0; margin: 10px 0; font-size: .93rem; }
+  .note.bad { border-color: var(--danger); background: var(--danger-soft); }
+  .note.good { border-color: var(--ok); background: var(--ok-soft); }
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+  svg text { fill: var(--text); font-family: system-ui, sans-serif; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .85rem; color: var(--muted); margin: 6px 0 14px; }
+  .legend span::before { content: ''; display: inline-block; width: 22px; height: 0; border-top: 3px solid; vertical-align: middle; margin-right: 6px; }
+  .legend .l-n::before { border-color: var(--accent); } .legend .l-d::before { border-color: var(--c-db); }
+  .legend .l-e::before { border-color: var(--danger); } .legend .l-r::before { border-color: var(--muted); border-top-style: dashed; }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+
+  /* ---------- Flow player ---------- */
+  .flowlayout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(290px, 1fr); gap: 16px; align-items: start; }
+  .flowdiagram { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+  .flowdiagram svg { display: block; min-width: 680px; width: 100%; height: auto; }
+  .flowdetail { position: sticky; top: 64px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; z-index: 5; }
+  .controls { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .stepcount { color: var(--muted); font-size: .8rem; margin-left: auto; align-self: center; }
+  .flowdetail h4 { margin: 4px 0 6px; font-size: 1rem; }
+  .flowdetail p { margin: 0 0 8px; font-size: .93rem; }
+  .coderef { display: block; margin: 6px 0; }
+  .lane-head rect { fill: var(--surface); stroke-width: 2; }
+  .lane-head text.t1 { font-size: 13px; font-weight: 700; } .lane-head text.t2 { font-size: 10.5px; fill: var(--muted); }
+  .lifeline { stroke-dasharray: 4 5; stroke-width: 1.5; opacity: .5; }
+  .step { cursor: pointer; transition: opacity .2s; }
+  .step.future { opacity: .22; }
+  .step .hit { fill: transparent; }
+  .step.current .hit { fill: var(--accent-soft); }
+  .step .arrow { stroke: var(--accent); stroke-width: 2.2; fill: none; }
+  .step.k-db .arrow { stroke: var(--c-db); } .step.k-err .arrow { stroke: var(--danger); }
+  .step.ret .arrow { stroke-dasharray: 6 4; }
+  .step.current .arrow { stroke-width: 3.4; }
+  .step .badge { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+  .step.k-db .badge { stroke: var(--c-db); } .step.k-err .badge { stroke: var(--danger); }
+  .step.current .badge { fill: var(--accent); } .step.k-db.current .badge { fill: var(--c-db); } .step.k-err.current .badge { fill: var(--danger); }
+  .step .bn { font-size: 11px; font-weight: 700; text-anchor: middle; }
+  .step.current .bn { fill: var(--on-accent); }
+  .step .lbl { font-size: 12px; paint-order: stroke; stroke: var(--surface); stroke-width: 5px; stroke-linejoin: round; }
+  .step.current .lbl { font-weight: 700; }
+  .mk-n { fill: var(--accent); } .mk-d { fill: var(--c-db); } .mk-e { fill: var(--danger); }
+
+  /* ---------- Simulators ---------- */
+  .sim-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  input[type=text], select { font: inherit; font-size: .92rem; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); min-width: 0; }
+  input[type=text] { flex: 1 1 200px; }
+  .dim { opacity: .4; }
+  .chip { cursor: pointer; border-radius: 999px; padding: 4px 12px; font-size: .82rem; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+  .chip.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: .9rem; }
+  .kv b { color: var(--muted); font-weight: 600; }
+  .ev-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .st rect { fill: var(--surface); stroke: var(--muted); stroke-width: 2; } .st text { font-size: 13px; font-weight: 600; text-anchor: middle; }
+  .st.on rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 3.5; }
+  .edge { stroke: var(--muted); stroke-width: 1.6; fill: none; } .edge.on { stroke: var(--accent); stroke-width: 3.5; }
+  .elbl { font-size: 10.5px; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; fill: var(--muted); text-anchor: middle; }
+  .elbl.on { fill: var(--accent); font-weight: 700; }
+  .layer.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  .layer.missing { border-color: var(--danger); color: var(--danger); }
+  .layer.missing.on { background: var(--danger); color: var(--on-accent); }
+
+  .toggle-theme { margin-left: auto; }
+  footer { color: var(--muted); font-size: .85rem; text-align: center; margin-top: 36px; }
+
+  @media (max-width: 700px) {
+    .top-inner { gap: 6px 10px; }
+    .top h1 { font-size: .95rem; }
+    nav.tabs { order: 3; flex: 1 1 100%; }
+    .toggle-theme { margin-left: auto; }
+  }
+  @media (max-width: 880px) {
+    .flowlayout { grid-template-columns: 1fr; }
+    .flowdetail { position: sticky; top: auto; bottom: 0; max-height: 44vh; overflow: auto; box-shadow: 0 -6px 18px rgba(0,0,0,.18); }
+    h2 { font-size: 1.25rem; } main { padding: 16px 12px 90px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <h1>AI Chat App: End-to-End Flows</h1>
+    <nav class="tabs" id="tabs" aria-label="Sections"></nav>
+    <button class="toggle-theme" id="theme" aria-label="Toggle dark mode">Dark mode</button>
+  </div>
+</header>
+
+<main>
+
+<!-- ================= OVERVIEW ================= -->
+<section class="panel" id="overview" data-title="Overview">
+  <h2>The whole app, as it works today</h2>
+  <p class="lead">This guide follows real requests through the real code, step by step. Use it after the first guide (<code>AI-Chat-Learning-Guide.html</code>, Phases 1 to 9). That guide explains the concepts; this one shows the finished app after streaming (Phase 10) and persistence (Phase 11).</p>
+
+  <div class="card">
+    <h3>Architecture now</h3>
+    <div class="tablewrap">
+    <svg viewBox="0 0 980 300" width="100%" style="min-width:760px" role="img" aria-label="Current architecture">
+      <defs><marker id="ov" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8a94a6"/></marker></defs>
+      <rect x="10" y="40" width="260" height="210" rx="12" fill="none" stroke="var(--c-ui)" stroke-width="2"/>
+      <text x="140" y="64" text-anchor="middle" font-weight="700">React + TypeScript (browser)</text>
+      <rect x="26" y="78" width="228" height="34" rx="8" fill="var(--accent-soft)"/><text x="140" y="100" text-anchor="middle" font-size="12">App.tsx: state + orchestration</text>
+      <rect x="26" y="120" width="228" height="34" rx="8" fill="var(--accent-soft)"/><text x="140" y="142" text-anchor="middle" font-size="12">Sidebar, MessageList, ChatInput</text>
+      <rect x="26" y="162" width="228" height="34" rx="8" fill="var(--accent-soft)"/><text x="140" y="184" text-anchor="middle" font-size="12">services/: stream reader + CRUD</text>
+      <rect x="26" y="204" width="228" height="34" rx="8" fill="var(--accent-soft)"/><text x="140" y="226" text-anchor="middle" font-size="12">localStorage: active chat id</text>
+
+      <rect x="350" y="20" width="300" height="250" rx="12" fill="none" stroke="var(--c-api)" stroke-width="2"/>
+      <text x="500" y="44" text-anchor="middle" font-weight="700">FastAPI (backend)</text>
+      <rect x="366" y="56" width="268" height="32" rx="8" fill="var(--accent-soft)"/><text x="500" y="77" text-anchor="middle" font-size="12">CORS + routers (main.py, routers/)</text>
+      <rect x="366" y="94" width="268" height="32" rx="8" fill="var(--accent-soft)"/><text x="500" y="115" text-anchor="middle" font-size="12">Pydantic schemas (validation)</text>
+      <rect x="366" y="132" width="268" height="32" rx="8" fill="var(--accent-soft)"/><text x="500" y="153" text-anchor="middle" font-size="12">streaming.py (SSE + save on finish)</text>
+      <rect x="366" y="170" width="268" height="32" rx="8" fill="var(--accent-soft)"/><text x="500" y="191" text-anchor="middle" font-size="12">services/openai_service.py</text>
+      <rect x="366" y="208" width="268" height="32" rx="8" fill="var(--accent-soft)"/><text x="500" y="229" text-anchor="middle" font-size="12">database.py + models.py (SQLAlchemy)</text>
+
+      <rect x="730" y="40" width="230" height="86" rx="12" fill="none" stroke="var(--c-db)" stroke-width="2"/>
+      <text x="845" y="70" text-anchor="middle" font-weight="700">SQLite: chat.db</text>
+      <text x="845" y="92" text-anchor="middle" font-size="12">conversations, messages</text>
+      <text x="845" y="110" text-anchor="middle" font-size="11" fill="var(--muted)">survives refresh + restart</text>
+      <rect x="730" y="160" width="230" height="90" rx="12" fill="none" stroke="var(--c-ai)" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="845" y="190" text-anchor="middle" font-weight="700">AI provider</text>
+      <text x="845" y="212" text-anchor="middle" font-size="12">OpenAI or Groq (base URL)</text>
+      <text x="845" y="230" text-anchor="middle" font-size="11" fill="var(--muted)">key only in backend .env</text>
+
+      <line x1="270" y1="120" x2="348" y2="120" stroke="#8a94a6" stroke-width="2" marker-end="url(#ov)"/>
+      <line x1="348" y1="170" x2="272" y2="170" stroke="#8a94a6" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ov)"/>
+      <text x="309" y="110" text-anchor="middle" font-size="10.5" fill="var(--muted)">JSON / fetch</text>
+      <text x="309" y="188" text-anchor="middle" font-size="10.5" fill="var(--muted)">JSON + SSE</text>
+      <line x1="650" y1="224" x2="728" y2="100" stroke="#8a94a6" stroke-width="2" marker-end="url(#ov)"/>
+      <line x1="650" y1="190" x2="728" y2="200" stroke="#8a94a6" stroke-width="2" marker-end="url(#ov)"/>
+    </svg>
+    </div>
+    <div class="legend" style="margin-top:10px"><span class="l-n">Normal step</span><span class="l-d">Database read or write</span><span class="l-e">Failure path</span><span class="l-r">Response / return</span></div>
+  </div>
+
+  <div class="card">
+    <h3>What changed since the first guide</h3>
+    <div class="note">The first guide's "Data flow" tab describes the Phase 5 to 9 app. It's still right about concepts, but the flow below replaced it.</div>
+    <div class="tablewrap"><table>
+      <tr><th>Topic</th><th>Phases 1 to 9</th><th>Now (Phases 10 and 11)</th></tr>
+      <tr><td>Endpoint the UI uses</td><td><code>POST /chat</code></td><td><code>POST /conversations/{id}/messages/stream</code></td></tr>
+      <tr><td>Who owns history</td><td>The browser sent up to 20 messages</td><td>The server: it loads the last 20 from SQLite</td></tr>
+      <tr><td>What the client sends</td><td>Whole history</td><td>Only the new text plus a message id</td></tr>
+      <tr><td>Reply delivery</td><td>One JSON response when finished</td><td>Server-Sent Events, token by token</td></tr>
+      <tr><td>After a refresh</td><td>Everything lost</td><td>Chat reopens from the database</td></tr>
+      <tr><td>Retry</td><td>Re-sent the same history</td><td>Re-sends the same message id; server replaces the partial answer</td></tr>
+      <tr><td>Stop</td><td>None</td><td>Aborts the request; partial text is kept and saved</td></tr>
+      <tr><td>Clear Chat</td><td>Emptied the screen</td><td>Deletes the open conversation</td></tr>
+    </table></div>
+  </div>
+
+  <div class="card">
+    <h3>File map: who does what</h3>
+    <div class="tablewrap"><table>
+      <tr><th>File</th><th>Responsibility</th><th>Appears in</th></tr>
+      <tr><td><code>frontend/src/App.tsx</code></td><td>All state; send, retry, stop, open, delete</td><td>Send, Stop, Failures, Conversations, UI states</td></tr>
+      <tr><td><code>components/ChatInput.tsx</code></td><td>Textarea, counter, Send/Stop, Enter handling</td><td>Send, UI states</td></tr>
+      <tr><td><code>components/MessageList.tsx</code></td><td>Bubbles, typing dots, error box + Retry, auto-scroll</td><td>Streaming, Failures</td></tr>
+      <tr><td><code>components/Sidebar.tsx</code></td><td>Saved chats, New chat, delete, mobile drawer</td><td>Conversations</td></tr>
+      <tr><td><code>services/chatService.ts</code></td><td>Reads the SSE stream; <code>handleFrame</code></td><td>Streaming, Stop</td></tr>
+      <tr><td><code>services/conversationService.ts</code>, <code>http.ts</code></td><td>CRUD calls; error text extraction; <code>fetchOrThrow</code></td><td>Startup, Conversations, Failures</td></tr>
+      <tr><td><code>backend/main.py</code></td><td>App, CORS, lifespan, stateless endpoints</td><td>Startup, Security</td></tr>
+      <tr><td><code>backend/routers/conversations.py</code></td><td>The five conversation routes; context loading; saving</td><td>Send, Memory, Database</td></tr>
+      <tr><td><code>backend/schemas.py</code></td><td>Pydantic request/response models and limits</td><td>Send, Security</td></tr>
+      <tr><td><code>backend/streaming.py</code></td><td><code>sse_events</code>: framing, close, save on finish</td><td>Streaming, Stop</td></tr>
+      <tr><td><code>backend/services/openai_service.py</code></td><td>SDK client, system prompt, <code>_translate</code> errors</td><td>Send, Failures</td></tr>
+      <tr><td><code>backend/database.py</code>, <code>models.py</code></td><td>Engine, sessions, tables</td><td>Startup, Database</td></tr>
+    </table></div>
+  </div>
+  <p class="lead">How to use the diagrams: pick a section above, then press <b>Next</b> (or click any step). Each step shows what happens, the exact code location, and the data involved.</p>
+</section>
+
+<!-- ================= STARTUP ================= -->
+<section class="panel" id="startup" data-title="Startup">
+  <h2>Startup: from "run it" to "chats on screen"</h2>
+  <p class="lead">Two separate startups: the backend process boots and prepares the database, then the browser loads the page and restores your last chat.</p>
+  <div class="pills" id="pills-startup"></div>
+  <div id="flow-startup"></div>
+  <div class="note good"><b>Why it matters:</b> the OpenAI client is deliberately not created at startup. The server boots without a key, so <code>/health</code> works and a missing key becomes a safe error on the first chat request instead of a crash.</div>
+</section>
+
+<!-- ================= SEND ================= -->
+<section class="panel" id="send" data-title="Send a message">
+  <h2>Send a message, end to end</h2>
+  <p class="lead">The most important flow. Every file in the app takes part. Watch which steps write to the database (green) and where the reply starts streaming.</p>
+  <div class="pills" id="pills-send"></div>
+  <div id="flow-send"></div>
+</section>
+
+<!-- ================= MEMORY ================= -->
+<section class="panel" id="memory" data-title="Context & memory">
+  <h2>How follow-up questions work</h2>
+  <p class="lead">The model itself remembers nothing. Each request carries the context, and the <b>server</b> builds it from the database. Try it: send a few messages, then shrink the window to see what the model forgets.</p>
+  <div class="card">
+    <div class="sim-row">
+      <label>Context window:
+        <select id="win"><option value="20">20 messages (real value)</option><option value="6">6 (demo)</option><option value="4">4 (demo)</option></select>
+      </label>
+      <button id="memReset">Reset</button>
+    </div>
+    <div class="sim-row">
+      <input type="text" id="memInput" placeholder="Type a message, e.g. My name is Sam" maxlength="80" aria-label="Simulated message" />
+      <button id="memSend" class="active">Send</button>
+    </div>
+    <div class="grid">
+      <div>
+        <h3>1. Database: <code>messages</code> table</h3>
+        <div class="tablewrap"><table id="memTable"><tr><th>id</th><th>role</th><th>content</th><th>sent?</th></tr></table></div>
+        <p class="lead" style="margin:6px 0 0">Conversation title: <b id="memTitle">New chat</b></p>
+      </div>
+      <div>
+        <h3>2. What the model receives</h3>
+        <pre id="memPayload">(send a message)</pre>
+      </div>
+    </div>
+    <div class="note">The newest user message is saved <b>before</b> the context is loaded, so the window always ends with it. Rows outside the window stay in the database and in your UI, but the model never sees them.</div>
+  </div>
+  <div class="card">
+    <h3>Why the server, not the browser?</h3>
+    <div class="grid">
+      <div><b>Before (Phase 9)</b><p>The browser sent the whole history every time. A modified client could add fake "assistant" turns or oversized history.</p></div>
+      <div><b>Now (Phase 11)</b><p>The browser sends only <code>{content, client_message_id}</code>. The server decides the context from rows it wrote itself, so there's nothing to forge.</p></div>
+    </div>
+    <p>Code: <code>routers/conversations.py: _recent_context</code> (newest 20 by id, reversed to chronological order).</p>
+  </div>
+</section>
+
+<!-- ================= STREAMING ================= -->
+<section class="panel" id="streaming" data-title="Streaming">
+  <h2>Streaming: from token to pixel</h2>
+  <p class="lead">The reply isn't one response. It's a long-lived HTTP response made of small text frames (Server-Sent Events). The first part follows one token across three layers. The second lets you replay how the browser reassembles frames from awkwardly split network chunks.</p>
+  <div id="flow-streaming"></div>
+  <div class="card" style="margin-top:16px">
+    <h3>Playground: reassembling frames from network chunks</h3>
+    <p>Network reads don't line up with SSE frames. Step through five reads and watch <code>chatService.ts</code> buffer and split on the blank line (<code>\n\n</code>) that ends each frame.</p>
+    <div class="sim-row">
+      <button id="sseNext" class="active">Next network read ▶</button>
+      <button id="sseReset">Reset</button>
+      <label><input type="checkbox" id="sseCut" /> Connection cut before <code>done</code></label>
+    </div>
+    <div class="grid">
+      <div><h3>Raw read</h3><pre id="sseRaw">(none yet)</pre><h3 style="margin-top:12px">Buffer after splitting</h3><pre id="sseBuf">""</pre></div>
+      <div><h3>Frames parsed so far</h3><pre id="sseFrames">(none)</pre><h3 style="margin-top:12px">What the user sees</h3><pre id="sseUi">(empty bubble)</pre><p id="sseStatus" class="lead" style="margin:6px 0 0"></p></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>The three frame types</h3>
+    <div class="tablewrap"><table>
+      <tr><th>Frame</th><th>Looks like</th><th>Client does</th></tr>
+      <tr><td>text</td><td><code>data: {"delta": "Hel"}</code></td><td>First one creates the assistant bubble; the rest append</td></tr>
+      <tr><td>done</td><td><code>event: done</code> + <code>data: {}</code></td><td>Marks finished. A stream that ends without it is "interrupted"</td></tr>
+      <tr><td>error</td><td><code>event: error</code> + <code>data: {"detail": "…"}</code></td><td>Throws; partial text stays, error box + Retry appear</td></tr>
+    </table></div>
+  </div>
+</section>
+
+<!-- ================= STOP ================= -->
+<section class="panel" id="stop" data-title="Stop & disconnect">
+  <h2>Stop, closed tabs, and not paying for unread tokens</h2>
+  <p class="lead">Cancelling is a chain reaction from the browser to the AI provider. The partial text you saw is saved, so a refresh shows exactly what you saw.</p>
+  <div class="pills" id="pills-stop"></div>
+  <div id="flow-stop"></div>
+  <div class="note"><b>Honest detail:</b> tokens the provider generated before it noticed the closed connection may still be billed. Stopping bounds the cost; it doesn't make it zero.</div>
+</section>
+
+<!-- ================= FAILURES ================= -->
+<section class="panel" id="fail" data-title="Failures & Retry">
+  <h2>When things go wrong, and why Retry is safe</h2>
+  <p class="lead">Four failure shapes, each handled differently. The key rule: <b>a retry re-sends the same message id</b>, so the server can tell "this message again" from "a new message", and never duplicates or deletes the wrong thing.</p>
+  <div class="pills" id="pills-fail"></div>
+  <div id="flow-fail"></div>
+  <div class="card" style="margin-top:16px">
+    <h3>Which status code, and what the user sees</h3>
+    <div class="tablewrap"><table>
+      <tr><th>What failed</th><th>Status</th><th>User sees</th><th>Logged on the server</th></tr>
+      <tr><td>Body invalid (blank, too long, bad id)</td><td>422</td><td>"Invalid request: …"</td><td>nothing</td></tr>
+      <tr><td>Conversation id unknown</td><td>404</td><td>"Conversation not found."</td><td>nothing</td></tr>
+      <tr><td>Provider timeout</td><td>504</td><td>"The AI took too long to respond…"</td><td>nothing extra</td></tr>
+      <tr><td>Provider unreachable</td><td>502</td><td>"Could not reach the AI service…"</td><td>nothing extra</td></tr>
+      <tr><td>Provider rate limit</td><td>429</td><td>"Too many requests…"</td><td>nothing extra</td></tr>
+      <tr><td>Bad API key, missing key or model</td><td>500</td><td>"The server is not configured correctly."</td><td>which setting, never the key</td></tr>
+      <tr><td>Other provider error / empty reply</td><td>502</td><td>"The AI service returned an error." / "…empty response."</td><td>status code or exception type only</td></tr>
+      <tr><td>Any of the above <i>after</i> streaming began</td><td>200 (already sent)</td><td>Same text, shown via <code>event: error</code>; partial answer kept</td><td>same</td></tr>
+      <tr><td>Server down / CORS blocked</td><td>none</td><td>"Cannot reach the server. Is the backend running?"</td><td>(nothing reached it)</td></tr>
+    </table></div>
+  </div>
+</section>
+
+<!-- ================= DATABASE ================= -->
+<section class="panel" id="database" data-title="Database">
+  <h2>The database: what is written, and when</h2>
+  <p class="lead">Two tables. Click a write point to see the equivalent SQL, the code that does it, and what a page refresh would show.</p>
+  <div class="card">
+    <div class="tablewrap">
+    <svg viewBox="0 0 880 250" width="100%" style="min-width:720px" role="img" aria-label="Entity relationship diagram">
+      <defs><marker id="erd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8a94a6"/></marker></defs>
+      <rect x="10" y="20" width="340" height="200" rx="10" fill="var(--surface)" stroke="var(--c-db)" stroke-width="2"/>
+      <rect x="10" y="20" width="340" height="34" rx="10" fill="var(--ok-soft)" stroke="var(--c-db)" stroke-width="2"/>
+      <text x="180" y="43" text-anchor="middle" font-weight="700">conversations</text>
+      <text class="mono" x="26" y="80" font-size="12.5">id          TEXT  PK (random UUID)</text>
+      <text class="mono" x="26" y="104" font-size="12.5">title       TEXT  "New chat" → 1st msg</text>
+      <text class="mono" x="26" y="128" font-size="12.5">created_at  DATETIME</text>
+      <text class="mono" x="26" y="152" font-size="12.5">updated_at  DATETIME (sort key)</text>
+      <text x="26" y="196" font-size="12" fill="var(--muted)">relationship: cascade="all, delete-orphan"</text>
+
+      <rect x="470" y="10" width="400" height="230" rx="10" fill="var(--surface)" stroke="var(--c-db)" stroke-width="2"/>
+      <rect x="470" y="10" width="400" height="34" rx="10" fill="var(--ok-soft)" stroke="var(--c-db)" stroke-width="2"/>
+      <text x="670" y="33" text-anchor="middle" font-weight="700">messages</text>
+      <text class="mono" x="486" y="70" font-size="12.5">id              INTEGER PK autoincrement</text>
+      <text class="mono" x="486" y="94" font-size="12.5">conversation_id TEXT FK → conversations.id</text>
+      <text class="mono" x="486" y="118" font-size="12.5">                ON DELETE CASCADE, indexed</text>
+      <text class="mono" x="486" y="142" font-size="12.5">role            "user" | "assistant"</text>
+      <text class="mono" x="486" y="166" font-size="12.5">content         TEXT</text>
+      <text class="mono" x="486" y="190" font-size="12.5">client_id       TEXT NULL (user msgs only)</text>
+      <text class="mono" x="486" y="214" font-size="12.5">UNIQUE(conversation_id, client_id)</text>
+      <line x1="350" y1="110" x2="468" y2="110" stroke="#8a94a6" stroke-width="2" marker-end="url(#erd)"/>
+      <text x="409" y="100" text-anchor="middle" font-size="12">1 → many</text>
+    </svg>
+    </div>
+    <div class="grid" style="margin-top:10px">
+      <div><b>Order</b><p>Message order is the autoincrement <code>id</code>. "Last 20" and "after this message" are both id comparisons.</p></div>
+      <div><b>Idempotency</b><p>The unique pair <code>(conversation_id, client_id)</code> means the same user message can't be stored twice, even with concurrent retries.</p></div>
+      <div><b>Two layers of cascade</b><p>The ORM relationship deletes messages on <code>db.delete(conversation)</code>; the foreign key (with <code>PRAGMA foreign_keys=ON</code>) guarantees it at the database level too.</p></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Write points</h3>
+    <div class="pills" id="writePills"></div>
+    <div id="writeDetail"></div>
+  </div>
+  <div class="card">
+    <h3>Sessions: why the stream opens its own</h3>
+    <p>A request's database session (the <code>get_db</code> dependency) is opened when the request starts and closed with it. The assistant reply is saved at the <i>end of a long stream</i>, possibly after the request's session is gone, and also when the client disconnects. So <code>_save_assistant_message</code> opens a fresh session (<code>database.SessionLocal()</code>) and commits on its own.</p>
+    <pre>request session  ──open──[ lookup ▸ INSERT user ▸ COMMIT ▸ SELECT last 20 ]──closed──▶
+stream session                                    (later) ──open──[ INSERT assistant ▸ COMMIT ]──closed</pre>
+  </div>
+</section>
+
+<!-- ================= CONVERSATIONS ================= -->
+<section class="panel" id="conv" data-title="Conversations UI">
+  <h2>Managing conversations</h2>
+  <p class="lead">Switching, starting, and deleting chats. Most of the work is in <code>App.tsx</code>; the server only stores and returns data.</p>
+  <div class="pills" id="pills-conv"></div>
+  <div id="flow-conv"></div>
+  <div class="note"><b>Mobile:</b> below 700px the sidebar is a drawer opened by the ☰ button. Choosing a chat closes it. While a reply is streaming, the sidebar buttons are disabled so you can't switch away mid-answer (use Stop first).</div>
+</section>
+
+<!-- ================= UI STATES ================= -->
+<section class="panel" id="states" data-title="UI states">
+  <h2>The chat screen as a state machine</h2>
+  <p class="lead">Which states the screen can be in, what's on screen in each, and what moves it to the next one. Fire events yourself and watch the diagram and the variables.</p>
+  <div class="grid" style="grid-template-columns: minmax(0,1.6fr) minmax(280px,1fr)">
+    <div class="card">
+      <div class="tablewrap">
+      <svg id="smSvg" viewBox="0 0 700 310" width="100%" style="min-width:600px" role="img" aria-label="State machine"></svg>
+      </div>
+    </div>
+    <div class="card">
+      <h3 id="smName"></h3>
+      <p id="smDesc"></p>
+      <div class="kv" id="smVars"></div>
+      <h3 style="margin-top:12px">Fire an event</h3>
+      <div class="ev-btns" id="smEvents"></div>
+      <p class="lead" id="smLast" style="margin-top:10px"></p>
+      <button id="smReset">Reset to Idle</button>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SECURITY ================= -->
+<section class="panel" id="security" data-title="Security & config">
+  <h2>Defense in layers</h2>
+  <p class="lead">A request passes through several gates before it can cost money or touch data. Click a layer to see what it stops, where it lives, and whether it can be bypassed.</p>
+  <div class="card">
+    <div class="pills" id="layerPills"></div>
+    <div id="layerDetail"></div>
+  </div>
+  <div class="card">
+    <h3>Where configuration lives</h3>
+    <div class="tablewrap"><table>
+      <tr><th>Setting</th><th>Where</th><th>Read by</th><th>When</th></tr>
+      <tr><td><code>OPENAI_API_KEY</code></td><td><code>backend/.env</code> (gitignored)</td><td><code>_get_client()</code></td><td>First chat request, then cached</td></tr>
+      <tr><td><code>OPENAI_MODEL</code></td><td><code>backend/.env</code></td><td><code>_build_request()</code></td><td>Every request</td></tr>
+      <tr><td><code>OPENAI_BASE_URL</code></td><td><code>backend/.env</code> (empty = OpenAI, Groq URL for Groq)</td><td><code>_get_client()</code></td><td>When the client is created</td></tr>
+      <tr><td><code>DATABASE_URL</code></td><td><code>backend/.env</code> (default <code>backend/chat.db</code>)</td><td><code>database.py</code></td><td>Import time</td></tr>
+      <tr><td><code>VITE_API_URL</code></td><td><code>frontend/.env</code> (optional)</td><td><code>http.ts</code></td><td>Build/dev start. It's <b>public</b>, never put secrets here</td></tr>
+    </table></div>
+    <div class="note bad"><b>Not built yet: authentication.</b> Anyone who can reach the API can list, read and delete every conversation. That is acceptable for local use only; add user accounts and ownership checks before any deployment.</div>
+  </div>
+</section>
+
+<!-- ================= TESTING ================= -->
+<section class="panel" id="testing" data-title="Testing">
+  <h2>Testing: what is real and what is faked</h2>
+  <p class="lead">42 automated backend tests, plus a browser-level rig used while building. Everything of yours runs for real; only the outside world is replaced.</p>
+  <div class="card">
+    <div class="tablewrap">
+    <svg viewBox="0 0 900 210" width="100%" style="min-width:720px" role="img" aria-label="What is mocked in tests">
+      <defs><marker id="tt" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8a94a6"/></marker></defs>
+      <rect x="10" y="50" width="150" height="70" rx="10" fill="none" stroke="var(--c-user)" stroke-width="2"/><text x="85" y="82" text-anchor="middle" font-weight="700">pytest test</text><text x="85" y="102" text-anchor="middle" font-size="11" fill="var(--muted)">asserts</text>
+      <rect x="215" y="50" width="150" height="70" rx="10" fill="var(--ok-soft)" stroke="var(--ok)" stroke-width="2"/><text x="290" y="78" text-anchor="middle" font-weight="700">TestClient</text><text x="290" y="98" text-anchor="middle" font-size="11" fill="var(--muted)">in-process, no port</text>
+      <rect x="420" y="30" width="190" height="110" rx="10" fill="var(--ok-soft)" stroke="var(--ok)" stroke-width="2"/><text x="515" y="58" text-anchor="middle" font-weight="700">YOUR code: REAL</text><text x="515" y="80" text-anchor="middle" font-size="11">routing, CORS, Pydantic,</text><text x="515" y="96" text-anchor="middle" font-size="11">error mapping, SSE, saving</text>
+      <rect x="665" y="10" width="220" height="70" rx="10" fill="var(--ok-soft)" stroke="var(--ok)" stroke-width="2"/><text x="775" y="40" text-anchor="middle" font-weight="700">SQLite temp file: REAL</text><text x="775" y="60" text-anchor="middle" font-size="11" fill="var(--muted)">fresh file per test</text>
+      <rect x="665" y="100" width="220" height="70" rx="10" fill="var(--warn-soft)" stroke="var(--c-ai)" stroke-width="2" stroke-dasharray="6 4"/><text x="775" y="130" text-anchor="middle" font-weight="700">AI client: MOCKED</text><text x="775" y="150" text-anchor="middle" font-size="11" fill="var(--muted)">fake stream / raises errors</text>
+      <line x1="160" y1="85" x2="213" y2="85" stroke="#8a94a6" stroke-width="2" marker-end="url(#tt)"/>
+      <line x1="365" y1="85" x2="418" y2="85" stroke="#8a94a6" stroke-width="2" marker-end="url(#tt)"/>
+      <line x1="610" y1="60" x2="663" y2="45" stroke="#8a94a6" stroke-width="2" marker-end="url(#tt)"/>
+      <line x1="610" y1="110" x2="663" y2="130" stroke="#8a94a6" stroke-width="2" marker-end="url(#tt)"/>
+    </svg>
+    </div>
+  </div>
+  <div class="card">
+    <h3>What each test file proves</h3>
+    <div class="tablewrap"><table>
+      <tr><th>File</th><th>Tests</th><th>Proves</th></tr>
+      <tr><td><code>test_chat.py</code></td><td>18</td><td>Validation (422, never calls the model), error mapping to status codes without leaking upstream text, missing config, CORS allows only the dev origin</td></tr>
+      <tr><td><code>test_stream.py</code></td><td>7</td><td>SSE framing, newline safety, empty chunks skipped, pre-stream errors are real HTTP errors, mid-stream errors become <code>event: error</code>, upstream stream closed</td></tr>
+      <tr><td><code>test_conversations.py</code></td><td>17</td><td>CRUD lifecycle, context comes from the DB, forged client history ignored, 20-message window, idempotent retry, partial answer saved and replaced, saved on cancel, cascade delete, foreign keys enforced</td></tr>
+    </table></div>
+    <div class="note">Tests were checked by <b>breaking the code on purpose</b>: removing the "drop partial answer" logic failed 2 tests, and turning off SQLite foreign keys exposed a gap that a new test now pins.</div>
+  </div>
+  <div class="card">
+    <h3>The end-to-end rig (used while building)</h3>
+    <ol>
+      <li>A tiny local server speaks the OpenAI streaming format, with scripted behaviors: a normal reply, a slow reply, a connection that dies mid-stream, and a 401.</li>
+      <li>The real backend runs against it by setting <code>OPENAI_BASE_URL</code>, with a fresh SQLite file.</li>
+      <li>A headless browser drives the real UI: streaming, Stop, refresh restore, retry without duplicates, delete, mobile drawer.</li>
+    </ol>
+    <p>This is why the Phase 10 and 11 behavior was verified without spending real tokens.</p>
+  </div>
+</section>
+
+<!-- ================= ENDPOINTS ================= -->
+<section class="panel" id="endpoints" data-title="Endpoints">
+  <h2>Every endpoint at a glance</h2>
+  <p class="lead">Filter by group. The UI uses the conversation endpoints; the stateless ones remain as simple, testable building blocks.</p>
+  <div class="pills" id="epPills"></div>
+  <div class="card tablewrap"><table id="epTable"></table></div>
+</section>
+
+</main>
+<footer>Companion to <code>AI-Chat-Learning-Guide.html</code>. Source: <code>README.md</code>, <code>docs/</code>, and the code itself.</footer>
+
+<script>
+/* =====================================================================
+   Data: lanes and flows
+   ===================================================================== */
+const LANE = {
+  term: { label: 'Terminal',     sub: 'you run commands', color: 'var(--c-user)' },
+  you:  { label: 'You',          sub: 'keyboard / mouse', color: 'var(--c-user)' },
+  ui:   { label: 'React UI',     sub: 'App.tsx',          color: 'var(--c-ui)' },
+  ls:   { label: 'localStorage', sub: 'browser',          color: 'var(--c-user)' },
+  api:  { label: 'FastAPI',      sub: 'backend',          color: 'var(--c-api)' },
+  env:  { label: '.env',         sub: 'process env',      color: 'var(--c-env)' },
+  db:   { label: 'SQLite',       sub: 'chat.db',          color: 'var(--c-db)' },
+  ai:   { label: 'AI provider',  sub: 'OpenAI / Groq',    color: 'var(--c-ai)' }
+};
+
+const FLOWS = {};
+
+/* ---------- Startup ---------- */
+FLOWS.startup = [
+  { name: 'Backend starts', lanes: ['term', 'env', 'api', 'db'],
+    intro: 'Run <code>uvicorn main:app --reload --port 8000</code> and follow what the server does before it accepts its first request.',
+    steps: [
+      { f: 'term', t: 'api', label: 'uvicorn main:app', title: 'Uvicorn imports your app', text: 'Uvicorn is the ASGI server. <code>main:app</code> means "in <code>main.py</code>, the object named <code>app</code>". It imports the module, which runs the code at the top of <code>main.py</code> in order.', code: 'backend/main.py' },
+      { f: 'api', t: 'env', label: 'load_dotenv()', title: 'Secrets are loaded first', text: '<code>load_dotenv()</code> reads <code>backend/.env</code> into the process environment (OPENAI_API_KEY, OPENAI_MODEL, OPENAI_BASE_URL, DATABASE_URL). It runs <b>before</b> the other project imports, because <code>database.py</code> reads <code>DATABASE_URL</code> at import time. That ordering is why those imports carry <code>noqa: E402</code>.', code: 'main.py: load_dotenv() above the "from database import …" line' },
+      { f: 'env', t: 'api', ret: true, label: 'os.environ filled', title: 'Environment ready', text: 'Nothing is validated yet: a missing key is not an error at startup. It becomes a safe 500 on the first chat request.' },
+      { f: 'api', t: 'api', label: 'create engine', title: 'Database engine is created', text: '<code>make_engine()</code> builds a SQLAlchemy engine for <code>DATABASE_URL</code> (default <code>backend/chat.db</code>, anchored to the folder, so it\'s the same wherever you start uvicorn). For SQLite it allows use from other threads and turns on <code>PRAGMA foreign_keys</code> for every new connection. <b>No connection is opened and no file is created yet.</b>', code: 'database.py: make_engine, SessionLocal' },
+      { f: 'api', t: 'api', label: 'CORS + routers', title: 'Middleware and routes are registered', text: 'CORS middleware allows only <code>localhost:5173</code> and <code>127.0.0.1:5173</code> (methods GET, POST, DELETE). The conversations router and the stateless <code>/chat</code> endpoints are attached.', code: 'main.py: add_middleware, include_router' },
+      { f: 'api', t: 'db', kind: 'db', label: 'init_db(): CREATE TABLE', title: 'Tables are created if missing (lifespan)', text: 'The lifespan startup hook calls <code>init_db()</code> → <code>Base.metadata.create_all(engine)</code>. First run: <code>chat.db</code> is created with <code>conversations</code> and <code>messages</code>. Later runs: tables exist, so nothing changes. (<code>create_all</code> never alters existing tables; changing a model later needs a migration or deleting the dev DB.)', code: 'main.py: lifespan → database.init_db', data: 'CREATE TABLE IF NOT EXISTS conversations (...)\nCREATE TABLE IF NOT EXISTS messages (...)' },
+      { f: 'db', t: 'api', ret: true, label: 'tables ready', title: 'Database ready' },
+      { f: 'api', t: 'term', ret: true, label: 'Listening on :8000', title: 'Server accepts requests', text: 'Uvicorn prints <code>Uvicorn running on http://127.0.0.1:8000</code>. Note what has <b>not</b> happened: no AI client exists yet. It\'s created lazily on the first chat request, which keeps <code>/health</code> working with no key.', code: 'openai_service.py: _get_client()' }
+    ] },
+  { name: 'Page loads', lanes: ['you', 'ui', 'ls', 'api', 'db'],
+    intro: 'Open <code>http://localhost:5173</code>. Follow how the page finds and restores your last conversation.',
+    steps: [
+      { f: 'you', t: 'ui', label: 'open the page', title: 'Vite serves the app, React mounts', text: 'The dev server sends <code>index.html</code> and the bundle. <code>App</code> mounts with empty state (no chats, no messages). In development, React <b>StrictMode runs effects twice</b>, so you\'ll see two <code>GET /conversations</code> in the Network tab. That\'s expected and harmless.', code: 'main.tsx → App.tsx' },
+      { f: 'ui', t: 'api', label: 'GET /conversations', title: 'Ask the server for saved chats', text: 'The mount effect calls <code>listConversations()</code>. The browser sends an <code>Origin</code> header; the server\'s CORS middleware answers with the allow-origin header so JavaScript may read the reply.', code: 'App.tsx: mount useEffect → conversationService.listConversations' },
+      { f: 'api', t: 'db', kind: 'db', label: 'SELECT newest 100', title: 'Read the list', text: 'Newest activity first, capped at 100 rows. Only id, title and updated_at are returned, not the messages.', code: 'routers/conversations.py: list_conversations', data: 'SELECT * FROM conversations\nORDER BY updated_at DESC LIMIT 100' },
+      { f: 'api', t: 'ui', ret: true, label: '200 [{id,title,…}]', title: 'List arrives', text: 'The sidebar fills in. <code>response_model</code> makes sure only the declared fields are sent.', data: '[{"id":"3f9c…","title":"hello","updated_at":"…"}]' },
+      { f: 'ui', t: 'ls', label: 'read active id', title: 'Which chat was open?', text: '<code>readStoredId()</code> reads <code>activeConversationId</code> from <code>localStorage</code>. It\'s wrapped in try/catch because storage can throw (private mode) and it\'s only a convenience.', code: 'App.tsx: readStoredId' },
+      { f: 'ui', t: 'ui', label: 'pick target chat', title: 'Choose which chat to open', text: 'The stored id if it still exists in the list; otherwise the newest chat; if there are no chats, the empty "start the conversation" screen. A stale id (chat deleted elsewhere) therefore never causes an error.', code: 'App.tsx: list.find(c => c.id === readStoredId()) ?? list[0]' },
+      { f: 'ui', t: 'api', label: 'GET /conversations/{id}', title: 'Load that chat\'s messages', text: '<code>openConversation(id)</code> first increments a request counter (<code>openSeq</code>), so an older response can never overwrite a newer click.', code: 'App.tsx: openConversation' },
+      { f: 'api', t: 'db', kind: 'db', label: 'SELECT chat + messages', title: 'Read the conversation', text: 'Messages come back in id order (the relationship\'s <code>order_by</code>). Unknown id would be a 404.', code: 'routers/conversations.py: get_conversation', data: 'SELECT * FROM conversations WHERE id = ?\nSELECT * FROM messages WHERE conversation_id = ? ORDER BY id' },
+      { f: 'api', t: 'ui', ret: true, label: '200 {…, messages}', title: 'Messages arrive', text: 'Each stored message becomes a UI message with id <code>db-&lt;n&gt;</code>.', data: '{"id":"3f9c…","title":"hello","messages":[{"id":1,"role":"user","content":"hello"},{"id":2,"role":"assistant","content":"Hi!"}]}' },
+      { f: 'ui', t: 'ls', label: 'save active id', title: 'Render and remember', text: 'State is set, the sidebar highlights the open chat, the list scrolls to the bottom, and the id is written back to <code>localStorage</code>. If either request fails, you see "Cannot reach the server. Is the backend running?".', code: 'App.tsx: setActiveId, setMessages, writeStoredId' }
+    ] }
+];
+
+/* ---------- Send ---------- */
+FLOWS.send = [
+  { name: 'First message in a new chat', lanes: ['you', 'ui', 'ls', 'api', 'db', 'ai'],
+    intro: 'You open "+ New chat" (or the app has no chats) and send <code>hello</code>. This is the longest path through the app, because the conversation row is created lazily.',
+    steps: [
+      { f: 'you', t: 'ui', label: 'press Enter', title: '1. You press Enter', text: '<code>ChatInput</code>\'s <code>onKeyDown</code> sees Enter without Shift, calls <code>preventDefault()</code> (so no newline is typed) and <code>submit()</code>. Blank text and "reply in progress" are both ignored. The text is trimmed, the box is cleared, and <code>onSend(text)</code> is called.', code: 'components/ChatInput.tsx: handleKeyDown → submit' },
+      { f: 'ui', t: 'ui', label: 'handleSend: loading', title: '2. handleSend starts', text: 'Clears any error and sets <code>loading=true</code>, so the input is disabled and Send turns into <b>Stop</b>. There is no <code>activeId</code>, so there\'s no conversation yet.', code: 'App.tsx: handleSend' },
+      { f: 'ui', t: 'api', label: 'POST /conversations', title: '3. Create the conversation', text: 'Created on the first message so that "+ New chat" never leaves empty rows behind. No body and no JSON header, so no preflight.', code: 'services/conversationService.ts: createConversation' },
+      { f: 'api', t: 'db', kind: 'db', label: 'INSERT conversation', title: '4. Row is inserted', text: '<code>get_db</code> opened a session for this request. The id is a random UUID, so it can\'t be guessed from a URL. The title starts as "New chat".', code: 'routers/conversations.py: create_conversation', data: "INSERT INTO conversations (id, title, created_at, updated_at)\nVALUES ('3f9c…', 'New chat', now, now)" },
+      { f: 'api', t: 'ui', ret: true, label: '201 {id,title}', title: '5. Created', text: 'Status 201 with a <code>ConversationSummary</code>.', data: '{"id":"3f9c…","title":"New chat","updated_at":"…"}' },
+      { f: 'ui', t: 'ls', label: 'remember chat id', title: '6. UI adopts the new chat', text: '<code>setActiveId</code>, the sidebar gets the new row at the top, and the id goes into <code>localStorage</code> so a refresh reopens this chat.', code: 'App.tsx: handleSend (after createConversation)' },
+      { f: 'ui', t: 'ui', label: 'add user bubble', title: '7. The user bubble appears at once', text: 'The message gets a UUID (<code>userMsg.id</code>). That id is sent to the server as <code>client_message_id</code> and is what makes Retry safe. <code>requestReply</code> creates an <code>AbortController</code> (for Stop) and starts the stream.', code: 'App.tsx: handleSend, requestReply' },
+      { f: 'ui', t: 'api', label: 'OPTIONS, then POST', title: '8. The streaming request', text: 'A JSON POST triggers a CORS <b>preflight</b> (<code>OPTIONS</code>); the middleware approves, then the real <code>POST</code> follows. Notice the body: <b>only the new text</b>, not the history.', code: 'services/chatService.ts: streamMessage', data: 'POST /conversations/3f9c…/messages/stream\n{"content":"hello","client_message_id":"9b1e…"}' },
+      { f: 'api', t: 'api', label: 'Pydantic validates', title: '9. Validation gate', text: '<code>NewMessageRequest</code>: content is stripped, 1 to 4000 characters and not blank; <code>client_message_id</code> is 8 to 64 characters. Failure returns <b>422</b> and the handler never runs, so nothing is stored and no tokens are spent.', code: 'schemas.py: NewMessageRequest, MessageContent' },
+      { f: 'api', t: 'db', kind: 'db', label: 'save user message', title: '10. The user message is saved first', text: 'The route fetches the conversation (404 if unknown) and looks for an existing message with this <code>client_message_id</code>: none, so it\'s a new message. The title is still "New chat", so it becomes the first 50 characters (whitespace collapsed). The message is inserted and <b>committed before the AI is called</b>, so it survives even if the provider fails.', code: 'routers/conversations.py: send_message', data: "UPDATE conversations SET title='hello', updated_at=now\nINSERT INTO messages (conversation_id, role, content, client_id)\nVALUES ('3f9c…','user','hello','9b1e…')\nCOMMIT" },
+      { f: 'api', t: 'db', kind: 'db', label: 'SELECT last 20', title: '11. Context is loaded', text: 'The newest 20 messages by id, reversed into chronological order. The <b>server</b> decides what the model sees. See the "Context & memory" tab.', code: 'routers/conversations.py: _recent_context' },
+      { f: 'api', t: 'ai', label: 'completions(stream=True)', title: '12. Call the provider', text: '<code>open_reply_stream</code> builds the request: model from <code>OPENAI_MODEL</code>, the server-owned <b>system prompt</b>, then the context, with <code>max_completion_tokens=800</code>, a 30 s timeout and 2 retries. The call is made <i>now</i>, so bad key, rate limit and connection errors surface here, <b>before</b> any streaming, and can still be proper HTTP errors.', code: 'services/openai_service.py: open_reply_stream, _build_request', data: '[\n {"role":"system","content":"You are a helpful, concise assistant…"},\n {"role":"user","content":"hello"}\n]' },
+      { f: 'ai', t: 'api', ret: true, label: '200 + chunk stream', title: '13. Streaming begins', text: 'The provider accepts. The route returns <code>StreamingResponse(text/event-stream)</code>. From now on the HTTP status is <b>fixed at 200</b>, so a later failure can only be reported inside the stream.', code: 'streaming.py: sse_response' },
+      { f: 'api', t: 'ui', ret: true, label: 'data: {"delta":"Hi"}', title: '14. Text frames flow to the browser', text: 'For each provider chunk, <code>_iter_deltas</code> skips chunks with no text, and <code>sse_events</code> sends <code>data: {"delta": "…"}</code> followed by a blank line. The text is JSON-encoded so newlines in a reply can\'t break the framing. The "Streaming" tab walks through this in detail.', code: 'openai_service.py: _iter_deltas · streaming.py: sse_events' },
+      { f: 'ui', t: 'ui', label: 'bubble grows', title: '15. The reply grows on screen', text: 'The reader buffers bytes and splits on blank lines. The <b>first</b> delta creates the assistant bubble (typing dots disappear); later deltas append with a functional <code>setMessages(prev => …)</code> because many can arrive before React re-renders. Auto-scroll jumps (not smooth) while streaming.', code: 'App.tsx: requestReply onDelta · MessageList auto-scroll' },
+      { f: 'api', t: 'ui', ret: true, label: 'event: done', title: '16. The stream completes', text: 'The provider finishes. <code>sse_events</code> sends <code>event: done</code>. The client marks the stream finished (if it ends <i>without</i> this frame, the UI says "The response was interrupted").', code: 'streaming.py · services/chatService.ts: handleFrame' },
+      { f: 'api', t: 'db', kind: 'db', label: 'save assistant reply', title: '17. The reply is saved', text: 'The <code>finally</code> block closes the upstream stream, then calls <code>on_finish(full_text)</code>. <code>_save_assistant_message</code> opens a <b>new</b> session, inserts the assistant row, bumps <code>updated_at</code> and commits. This same block also runs on Stop, errors and disconnects. Blank text is never saved.', code: 'streaming.py: finally · routers/conversations.py: _save_assistant_message', data: "INSERT INTO messages (conversation_id, role, content)\nVALUES ('3f9c…','assistant','Hi! How can I help?')\nUPDATE conversations SET updated_at=now" },
+      { f: 'ui', t: 'api', label: 'GET /conversations', title: '18. Sidebar refresh', text: 'In <code>requestReply</code>\'s <code>finally</code>: <code>loading=false</code> (Send returns), then <code>refreshList()</code> so the sidebar shows the new title and the updated order.', code: 'App.tsx: requestReply → refreshList' }
+    ] },
+  { name: 'Follow-up message', lanes: ['you', 'ui', 'api', 'db', 'ai'],
+    intro: 'The chat already exists and has messages. You ask a follow-up. Compare with the first-message flow: no create step, and the context now contains earlier turns.',
+    steps: [
+      { f: 'you', t: 'ui', label: 'press Enter', title: '1. You press Enter', text: 'Same input handling as before.', code: 'ChatInput.tsx' },
+      { f: 'ui', t: 'ui', label: 'handleSend + bubble', title: '2. handleSend (chat exists)', text: '<code>activeId</code> is set, so the create step is skipped. A new message UUID is generated and the user bubble is added.', code: 'App.tsx: handleSend' },
+      { f: 'ui', t: 'api', label: 'POST …/messages/stream', title: '3. Send only the new text', text: 'Body: <code>{content, client_message_id}</code>. No history goes over the wire.', data: '{"content":"What is my name?","client_message_id":"c47a…"}' },
+      { f: 'api', t: 'api', label: 'Pydantic validates', title: '4. Validation', text: 'Same rules as before; failure is a 422 and nothing is stored.' },
+      { f: 'api', t: 'db', kind: 'db', label: 'INSERT user message', title: '5. Save the message', text: 'The <code>client_message_id</code> isn\'t found, so it\'s new. The title is not "New chat" any more, so it\'s left alone. Insert, bump <code>updated_at</code>, commit.', code: 'routers/conversations.py: send_message' },
+      { f: 'api', t: 'db', kind: 'db', label: 'SELECT last 20', title: '6. This is how it "remembers"', text: 'The context now contains your earlier question and the earlier answer, plus the new question. The model never remembered anything: it was <b>shown</b> the earlier turns again.', data: 'user: My name is Sam\nassistant: Nice to meet you, Sam.\nuser: What is my name?' },
+      { f: 'api', t: 'ai', label: 'system + context', title: '7. Provider call', text: 'The system prompt plus the stored turns. With more than 20 stored messages, only the newest 20 are sent, and the model forgets the rest.' },
+      { f: 'ai', t: 'api', ret: true, label: 'streamed tokens', title: '8. Tokens come back', text: 'Same streaming path as before.' },
+      { f: 'api', t: 'ui', ret: true, label: 'SSE frames', title: '9. Frames to the browser', text: 'The assistant bubble appears and grows.' },
+      { f: 'api', t: 'db', kind: 'db', label: 'save assistant reply', title: '10. Save the reply', text: 'Saved when the stream ends (or is stopped or fails), in its own session.' },
+      { f: 'ui', t: 'api', label: 'GET /conversations', title: '11. Sidebar refresh', text: 'The chat moves to the top of the list because <code>updated_at</code> changed.' }
+    ] }
+];
+
+/* ---------- Streaming ---------- */
+FLOWS.streaming = [
+  { name: 'Token to pixel', lanes: ['ai', 'api', 'ui'],
+    intro: 'Follow a single piece of text, "Hel", from the provider\'s chunk to the character you see. Then the same path repeats for every chunk.',
+    steps: [
+      { f: 'ai', t: 'api', label: 'chunk: "Hel"', title: '1. The provider sends a chunk', text: 'The provider streams its own SSE format. The OpenAI SDK parses each event into an object, so the code sees <code>chunk.choices[0].delta.content</code>.', data: 'data: {"choices":[{"delta":{"content":"Hel"}}]}' },
+      { f: 'api', t: 'api', label: '_iter_deltas', title: '2. Pick out the text', text: 'Some chunks carry no text: the first one only sets the role, a final one may carry usage with <i>no</i> <code>choices</code>. <code>_iter_deltas</code> skips those and yields only real text. It also remembers whether any text was produced, since a stream with none is an "empty response" error.', code: 'services/openai_service.py: _iter_deltas' },
+      { f: 'api', t: 'api', label: 'sse_events', title: '3. Wrap it as an SSE frame', text: '<code>sse_events</code> appends the piece to a list (so it can be saved later) and yields <code>data: {"delta": "Hel"}</code> plus a blank line. JSON encoding protects newlines inside the text.', code: 'streaming.py: sse_events, sse()' },
+      { f: 'api', t: 'ui', ret: true, label: 'data: {delta:"Hel"}', title: '4. Sent immediately', text: 'FastAPI iterates this sync generator in a thread pool and flushes each frame. The response headers <code>Cache-Control: no-cache</code> and <code>X-Accel-Buffering: no</code> stop proxies from holding frames back, which would make the text appear all at once.', code: 'streaming.py: sse_response' },
+      { f: 'ui', t: 'ui', label: 'reader.read()', title: '5. The browser reads bytes', text: '<code>response.body.getReader()</code> returns arbitrary byte chunks. One read can hold half a frame, one frame, or three frames. That mismatch is why the next step exists.', code: 'services/chatService.ts: streamMessage' },
+      { f: 'ui', t: 'ui', label: 'buffer + split', title: '6. Buffer and split', text: 'Decode with <code>TextDecoder({stream:true})</code> (so multi-byte characters split across reads survive), add to the buffer, and cut off complete frames at each blank line (<code>\\n\\n</code>). Leftover text stays in the buffer for the next read. Try the playground below.', code: 'chatService.ts: while ((end = buffer.indexOf("\\n\\n")) !== -1)' },
+      { f: 'ui', t: 'ui', label: 'handleFrame', title: '7. Parse the frame', text: 'Read the optional <code>event:</code> line and the <code>data:</code> line, <code>JSON.parse</code> it. <code>error</code> throws an Error; <code>done</code> marks finished; anything else calls <code>onDelta(text)</code>.', code: 'chatService.ts: handleFrame' },
+      { f: 'ui', t: 'ui', label: 'setMessages', title: '8. State update, then paint', text: 'The first delta creates the assistant message (dots disappear). Later deltas use <code>setMessages(prev => prev.map(…))</code>, a functional update, because several deltas can arrive before React re-renders. <code>MessageList</code> then jumps to the bottom.', code: 'App.tsx: requestReply onDelta' },
+      { f: 'ai', t: 'api', label: 'chunks 2…n', title: '9. Repeat', text: 'Steps 1 to 8 repeat for every chunk, typically many per second.' },
+      { f: 'ai', t: 'api', label: 'finish + [DONE]', title: '10. Provider finishes', text: 'The stream ends normally. <code>_iter_deltas</code>\'s <code>finally</code> closes the upstream stream, and if nothing was produced it raises "empty response".' },
+      { f: 'api', t: 'ui', ret: true, label: 'event: done', title: '11. The done frame', text: '<code>sse_events</code> sends <code>event: done</code>.', data: 'event: done\ndata: {}' },
+      { f: 'ui', t: 'ui', label: 'finished = true', title: '12. Stream complete', text: 'The read loop sees the stream end. Because <code>finished</code> is true, <code>streamMessage</code> resolves, and <code>requestReply</code>\'s finally clears <code>loading</code>. If the stream had ended <i>without</i> a done frame, it would throw "The response was interrupted. Please retry."', code: 'chatService.ts: after the read loop' }
+    ] }
+];
+
+/* ---------- Stop ---------- */
+FLOWS.stop = [
+  { name: 'Press Stop', lanes: ['you', 'ui', 'api', 'ai', 'db'],
+    intro: 'A long answer is streaming and you press <b>Stop</b>. Follow the cancellation all the way to the provider.',
+    steps: [
+      { f: 'you', t: 'ui', label: 'click Stop', title: '1. You click Stop', text: 'While <code>loading</code> is true, the Send button is replaced by Stop. It calls <code>abortRef.current?.abort()</code>.', code: 'ChatInput.tsx · App.tsx: handleStop' },
+      { f: 'ui', t: 'ui', label: 'AbortError (ignored)', title: '2. fetch rejects with AbortError', text: 'The pending <code>reader.read()</code> rejects with an <code>AbortError</code>. <code>requestReply</code> recognises it with <code>isAbortError</code> and does <b>not</b> show an error: Stop is a choice, not a failure. The partial bubble stays on screen.', code: 'App.tsx: requestReply catch · services/http.ts: isAbortError' },
+      { f: 'ui', t: 'api', label: 'connection closed', title: '3. The browser closes the connection', text: 'Aborting the fetch closes the HTTP connection. The server finds out when it next tries to send, or through the server\'s disconnect detection.' },
+      { f: 'api', t: 'api', label: 'generator closed', title: '4. Starlette closes the generator', text: 'The response iterator is closed, which raises <code>GeneratorExit</code> inside <code>sse_events</code> at its current <code>yield</code>.', code: 'streaming.py: sse_events' },
+      { f: 'api', t: 'api', label: 'finally runs', title: '5. The finally block always runs', text: '<code>finally</code> does two things in order: <code>deltas.close()</code> (which closes the upstream stream), then <code>on_finish("".join(parts))</code> with everything streamed so far.', code: 'streaming.py: finally' },
+      { f: 'api', t: 'ai', kind: 'err', label: 'close upstream', title: '6. The provider connection is closed', text: '<code>_iter_deltas</code>\'s <code>finally: stream.close()</code> closes the connection to the provider so no more tokens are generated for text nobody will read. A test pins this behavior.', code: 'openai_service.py: _iter_deltas finally' },
+      { f: 'api', t: 'db', kind: 'db', label: 'save PARTIAL reply', title: '7. The partial answer is saved', text: 'The partial text goes in as an assistant message (new session). So after a refresh you see <b>exactly what you saw when you pressed Stop</b>. If no text had arrived yet, nothing is saved.', code: 'routers/conversations.py: _save_assistant_message', data: "INSERT INTO messages (role, content)\nVALUES ('assistant', 'Once upon a time, a small rob')" },
+      { f: 'ui', t: 'api', label: 'GET /conversations', title: '8. UI settles', text: '<code>loading=false</code>, the Send button returns, the sidebar refreshes. You can send the next message immediately.', code: 'App.tsx: requestReply finally' }
+    ] },
+  { name: 'Close the tab', lanes: ['you', 'api', 'ai', 'db'],
+    intro: 'You close the tab or lose your connection while an answer streams. There\'s no UI code involved, but the server still cleans up.',
+    steps: [
+      { f: 'you', t: 'api', kind: 'err', label: 'tab closed / offline', title: '1. The client disappears', text: 'The browser closes the connection (or the network drops). No Stop button involved, and no JavaScript runs.' },
+      { f: 'api', t: 'api', label: 'generator closed', title: '2. Same server-side cleanup', text: 'The server detects the disconnect and closes the response generator, exactly like in the Stop flow. <code>finally</code> runs.', code: 'streaming.py: sse_events' },
+      { f: 'api', t: 'ai', kind: 'err', label: 'close upstream', title: '3. Stop paying for tokens', text: 'The provider stream is closed, so generation stops.' },
+      { f: 'api', t: 'db', kind: 'db', label: 'save partial reply', title: '4. Partial reply saved', text: 'Whatever had streamed so far is stored. When you reopen the app, the chat loads with that partial answer as the last message.' }
+    ] }
+];
+
+/* ---------- Failures ---------- */
+FLOWS.fail = [
+  { name: 'Provider fails before first token', lanes: ['you', 'ui', 'api', 'db', 'ai'],
+    intro: 'The provider rejects the request (bad key, rate limit, timeout, or unreachable) before streaming starts. Because no body has been sent yet, the server can still answer with a <b>real HTTP error</b>.',
+    steps: [
+      { f: 'ui', t: 'api', label: 'POST …/messages/stream', title: '1. The request arrives', text: 'It passes validation like any other message.', data: '{"content":"hello","client_message_id":"9b1e…"}' },
+      { f: 'api', t: 'db', kind: 'db', label: 'save user message', title: '2. The user message is saved first', text: 'Committed before the provider call. So a failure here never loses what you typed, and it\'s what makes the retry below safe.' },
+      { f: 'api', t: 'ai', kind: 'err', label: 'request fails', title: '3. The provider call fails', text: 'The SDK raises an exception: <code>APITimeoutError</code>, <code>APIConnectionError</code>, <code>RateLimitError</code>, <code>AuthenticationError</code>, or another <code>APIStatusError</code>.', code: 'services/openai_service.py: open_reply_stream' },
+      { f: 'api', t: 'api', kind: 'err', label: '_translate()', title: '4. Map to a safe error', text: 'Order matters because timeout is a subclass of connection error: timeout → 504, connection → 502, rate limit → 429, auth → 500 ("not configured correctly", logged), anything else → 502. It raises <code>ChatServiceError(status, safe_message)</code>. The provider\'s own message is <b>never</b> forwarded, and message text is never logged.', code: 'openai_service.py: _translate' },
+      { f: 'api', t: 'ui', kind: 'err', ret: true, label: 'HTTP 504 / 502 / 429 / 500', title: '5. A real HTTP error', text: 'The route turns it into <code>HTTPException(status, detail)</code>. Since no stream has started, the status code is genuine.', data: '504 {"detail":"The AI took too long to respond. Please try again."}' },
+      { f: 'ui', t: 'ui', kind: 'err', label: 'error box + Retry', title: '6. The UI shows the error', text: '<code>fetchOrThrow</code> sees <code>!response.ok</code>, <code>extractError</code> reads <code>detail</code>, and <code>requestReply</code>\'s catch sets the error. No assistant bubble is created. <code>loading=false</code>. The Retry button shows because a last user message exists.', code: 'services/http.ts: fetchOrThrow, extractError' },
+      { f: 'you', t: 'ui', label: 'click Retry', title: '7. You click Retry', text: '<code>handleRetry</code> finds the last user message and re-sends it with its <b>original id</b>.', code: 'App.tsx: handleRetry' },
+      { f: 'api', t: 'db', kind: 'db', label: 'id found → no duplicate', title: '8. The server recognises it', text: 'The lookup by <code>client_message_id</code> <b>finds</b> the stored message. So it does not insert a second copy; it deletes anything stored <i>after</i> it (nothing here) and carries on to generate the answer.', code: 'routers/conversations.py: existing is not None', data: "DELETE FROM messages\nWHERE conversation_id=? AND id > <id of the user message>" },
+      { f: 'api', t: 'ai', label: 'request again', title: '9. Generate again', text: 'This time it succeeds, and the normal streaming path takes over. The result: <b>exactly one</b> user message followed by one answer.' }
+    ] },
+  { name: 'Connection drops mid-stream', lanes: ['ui', 'api', 'db', 'ai'],
+    intro: 'The answer was streaming, then the provider connection died. The 200 status was already sent, so this failure travels <i>inside</i> the stream.',
+    steps: [
+      { f: 'api', t: 'ui', ret: true, label: 'data: {delta} …', title: '1. Some text has already arrived', text: 'The user sees part of an answer, for example "Partial answer".' },
+      { f: 'ai', t: 'api', kind: 'err', label: 'connection lost', title: '2. The upstream connection breaks', text: 'The provider stops, or the network fails, in the middle of the stream.' },
+      { f: 'api', t: 'api', kind: 'err', label: '_iter_deltas catches', title: '3. Caught inside the generator', text: 'The SDK raises an <code>OpenAIError</code> while iterating. <code>_iter_deltas</code> translates it via <code>_translate</code> into a <code>ChatServiceError</code>.', code: 'openai_service.py: _iter_deltas except OpenAIError' },
+      { f: 'api', t: 'ui', kind: 'err', ret: true, label: 'event: error', title: '4. Reported as an in-stream event', text: 'The status is already 200 and can\'t change, so <code>sse_events</code> sends <code>event: error</code> with a safe <code>detail</code>.', data: 'event: error\ndata: {"detail": "Could not reach the AI service. Please try again."}', code: 'streaming.py: except ChatServiceError' },
+      { f: 'api', t: 'db', kind: 'db', label: 'save partial reply', title: '5. The partial text is saved', text: '<code>finally</code> runs: close upstream, then <code>on_finish</code> stores "Partial answer" as the assistant message.' },
+      { f: 'ui', t: 'ui', kind: 'err', label: 'keep partial + error', title: '6. UI keeps the partial text', text: '<code>handleFrame</code> throws the error; <code>requestReply</code> sets it. The partial bubble stays, and the error box with Retry appears.', code: 'chatService.ts: handleFrame · App.tsx: requestReply' },
+      { f: 'ui', t: 'api', label: 'Retry (same id)', title: '7. Retry', text: '<code>handleRetry</code> first cuts the local list back to the user message (dropping the partial bubble), then re-sends the same <code>client_message_id</code>.', code: 'App.tsx: handleRetry' },
+      { f: 'api', t: 'db', kind: 'db', label: 'DELETE partial answer', title: '8. The server replaces the partial', text: 'The id is found, so everything after that user message, which is the partial answer, is deleted. A new answer is generated and saved. The database ends with one user message and one answer.', data: "DELETE FROM messages WHERE conversation_id=? AND id > <user msg id>\n(then a new assistant row is inserted at the end of the stream)" }
+    ] },
+  { name: 'Server unreachable', lanes: ['you', 'ui', 'api', 'db'],
+    intro: 'The backend is down (or a CORS rule blocks the call). The request never reaches the server, so the server has never seen this message.',
+    steps: [
+      { f: 'ui', t: 'api', kind: 'err', label: 'fetch fails (no response)', title: '1. No response at all', text: '<code>fetch</code> rejects with a network <code>TypeError</code>. That is different from an HTTP error. A CORS block looks identical to the page, so check the browser console to tell them apart.', code: 'services/http.ts: fetchOrThrow catch' },
+      { f: 'ui', t: 'ui', kind: 'err', label: '"Cannot reach the server"', title: '2. A clear message', text: 'It isn\'t an <code>AbortError</code>, so the UI shows "Cannot reach the server. Is the backend running?". Your message exists <b>only in the browser</b> right now; the database has no row for it.' },
+      { f: 'you', t: 'ui', label: 'start backend, Retry', title: '3. You fix it and click Retry', text: 'The same message id is re-sent.' },
+      { f: 'api', t: 'db', kind: 'db', label: 'id NOT found → insert', title: '4. The server treats it as new', text: 'The lookup finds nothing, so it is stored normally (and titles the chat if it was the first message). <b>Nothing is deleted.</b> A retry only removes messages stored <i>after the same id</i>, so an earlier, complete answer can never be destroyed by a retry of a message that never arrived.', code: 'routers/conversations.py: else branch of "existing is not None"' }
+    ] },
+  { name: 'Invalid request (422)', lanes: ['ui', 'api', 'db'],
+    intro: 'The UI normally prevents this (4000-character limit, no blank sends), but anyone can call the API directly with <code>curl</code>, so the server enforces the same rules.',
+    steps: [
+      { f: 'ui', t: 'api', label: 'POST (bad body)', title: '1. A request that breaks the rules', text: 'For example blank content, more than 4000 characters, or a too-short <code>client_message_id</code>.', data: '{"content":"   ","client_message_id":"short"}' },
+      { f: 'api', t: 'api', kind: 'err', label: 'Pydantic rejects', title: '2. Validation fails', text: 'FastAPI builds a <code>NewMessageRequest</code> from the JSON; Pydantic raises. The route function <b>never runs</b>.', code: 'schemas.py: MessageContent, NewMessageRequest' },
+      { f: 'api', t: 'ui', kind: 'err', ret: true, label: '422 {detail:[{msg,loc}]}', title: '3. Field-level errors', text: 'Each error has <code>loc</code> (where), <code>msg</code> (why) and <code>type</code>.', data: '{"detail":[{"type":"value_error","loc":["body","content"],"msg":"Value error, content must not be blank"}]}' },
+      { f: 'ui', t: 'ui', kind: 'err', label: '"Invalid request: …"', title: '4. The UI shows the first message', text: '<code>extractError</code> turns the array into one readable line. <b>Nothing was saved</b> and the provider was never called, so no cost was incurred.', code: 'services/http.ts: extractError' }
+    ] }
+];
+
+/* ---------- Conversations ---------- */
+FLOWS.conv = [
+  { name: 'Switch chats', lanes: ['you', 'ui', 'ls', 'api', 'db'],
+    intro: 'Click another conversation in the sidebar.',
+    steps: [
+      { f: 'you', t: 'ui', label: 'click a chat title', title: '1. You click a chat', text: 'The sidebar buttons are disabled while a reply is loading, so you can\'t switch away mid-stream.', code: 'components/Sidebar.tsx' },
+      { f: 'ui', t: 'ui', label: 'openSeq++', title: '2. Take a ticket number', text: '<code>openConversation</code> increments <code>openSeq</code> and remembers its number. If you click quickly through three chats, only the response matching the <i>latest</i> number is allowed to update the screen.', code: 'App.tsx: openConversation' },
+      { f: 'ui', t: 'api', label: 'GET /conversations/{id}', title: '3. Fetch the chat', text: 'A normal GET.' },
+      { f: 'api', t: 'db', kind: 'db', label: 'SELECT chat + messages', title: '4. Read from the database', text: 'Messages ordered by id. An unknown id is a 404 (the UI shows the message).', code: 'routers/conversations.py: get_conversation' },
+      { f: 'api', t: 'ui', ret: true, label: '200 {…, messages}', title: '5. The chat arrives', text: 'It may arrive out of order if you clicked quickly.' },
+      { f: 'ui', t: 'ui', label: 'seq still latest?', title: '6. Stale responses are dropped', text: 'If <code>seq !== openSeq.current</code>, a newer click has happened, so this response is ignored. Otherwise: set the active id, replace the messages, close the mobile drawer.', code: 'App.tsx: if (seq !== openSeq.current) return' },
+      { f: 'ui', t: 'ls', label: 'save active id', title: '7. Remember it', text: 'The id is written to <code>localStorage</code> so a refresh reopens this chat.' }
+    ] },
+  { name: 'New chat', lanes: ['you', 'ui', 'ls', 'api'],
+    intro: 'Click "+ New chat". Notice how little happens: there is no network call at all.',
+    steps: [
+      { f: 'you', t: 'ui', label: 'click + New chat', title: '1. You click New chat', text: 'Disabled while a reply is loading.' },
+      { f: 'ui', t: 'ui', label: 'reset state', title: '2. The screen is reset', text: '<code>startNewChat</code>: increments <code>openSeq</code> (cancelling any open request in flight), <code>activeId=null</code>, messages empty, error cleared, drawer closed.', code: 'App.tsx: startNewChat' },
+      { f: 'ui', t: 'ls', label: 'forget active id', title: '3. Forget the stored id', text: 'Removed from <code>localStorage</code>, so a refresh now shows the empty screen, not the old chat.' },
+      { f: 'ui', t: 'api', kind: 'db', ret: true, label: '(nothing sent)', title: '4. No database row yet', text: 'The conversation row is created <b>only when you send the first message</b> (see "Send a message"). That way, clicking "New chat" and leaving never leaves empty conversations in your history.' }
+    ] },
+  { name: 'Delete (Clear Chat or ×)', lanes: ['you', 'ui', 'api', 'db'],
+    intro: '"Clear Chat" in the header and the × in the sidebar both delete a conversation permanently.',
+    steps: [
+      { f: 'you', t: 'ui', label: 'click Clear Chat / ×', title: '1. You click delete', text: 'Disabled while a reply is loading.', code: 'App.tsx: handleClear / handleDelete' },
+      { f: 'ui', t: 'ui', label: 'confirm()', title: '2. Confirmation', text: '<code>window.confirm("Delete this conversation? This cannot be undone.")</code>. Cancel stops here.' },
+      { f: 'ui', t: 'api', label: 'DELETE /conversations/{id}', title: '3. The request', text: 'DELETE is a non-simple method, so the browser sends a CORS preflight first. The server\'s allowed methods include DELETE for exactly this reason.', code: 'services/conversationService.ts: deleteConversation' },
+      { f: 'api', t: 'db', kind: 'db', label: 'DELETE (cascade)', title: '4. The row is deleted, messages with it', text: 'The ORM cascade deletes the messages, and the database foreign key (<code>ON DELETE CASCADE</code> with <code>PRAGMA foreign_keys=ON</code>) guarantees there are no orphans.', code: 'routers/conversations.py: delete_conversation', data: "DELETE FROM messages WHERE conversation_id=?\nDELETE FROM conversations WHERE id=?" },
+      { f: 'api', t: 'ui', ret: true, label: '204 No Content', title: '5. Done', text: 'Status 204 has no body.' },
+      { f: 'ui', t: 'ui', label: 'update list / New chat', title: '6. Screen updates', text: 'The row leaves the sidebar. If it was the open chat, <code>startNewChat()</code> runs and you land on the empty screen.' }
+    ] },
+  { name: 'Stored chat no longer exists', lanes: ['ui', 'ls', 'api'],
+    intro: 'localStorage points to a chat that was deleted (another tab, or the DB was reset). The app recovers silently.',
+    steps: [
+      { f: 'ui', t: 'ls', label: 'read stored id', title: '1. Stale id read', text: 'The id from the last session, "deleted-id-123".' },
+      { f: 'ui', t: 'api', label: 'GET /conversations', title: '2. The list is fetched first', text: 'The list is the source of truth for which chats exist. This is why the app loads the list <i>before</i> trying to open a chat.' },
+      { f: 'ui', t: 'ui', label: 'id not in list → newest', title: '3. Fall back', text: '<code>list.find(...) ?? list[0]</code>: the stale id isn\'t found, so the newest chat opens; if the list is empty, the empty screen shows. No 404, no error box.', code: 'App.tsx: mount effect' }
+    ] }
+];
+
+/* =====================================================================
+   Flow player
+   ===================================================================== */
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Keep the current step on screen by scrolling the PAGE vertically only: not hidden
+// under the sticky header, nor (on phones) under the bottom-sheet detail panel.
+function ensureVisible(el, detailPanel) {
+  const r = el.getBoundingClientRect();
+  const sheet = getComputedStyle(detailPanel).position === 'sticky' && matchMedia('(max-width: 880px)').matches
+    ? detailPanel.getBoundingClientRect().height : 0;
+  const topLimit = 110, bottomLimit = innerHeight - sheet - 12;
+  if (r.top < topLimit) window.scrollBy({ top: r.top - topLimit, behavior: 'smooth' });
+  else if (r.bottom > bottomLimit) window.scrollBy({ top: r.bottom - bottomLimit, behavior: 'smooth' });
+}
+
+function renderFlow(host, flow) {
+  host.innerHTML = '';
+  const lanes = flow.lanes, n = lanes.length;
+  const W = 860, padX = 86, rowH = 60, top = 104;
+  const gap = n > 1 ? (W - 2 * padX) / (n - 1) : 0;
+  const xOf = (id) => padX + lanes.indexOf(id) * gap;
+  const H = top + flow.steps.length * rowH + 20;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sequence diagram: ${esc(flow.name)}">
+    <defs>
+      <marker id="mn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk-n" d="M0,0 L10,5 L0,10 z"/></marker>
+      <marker id="md" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk-d" d="M0,0 L10,5 L0,10 z"/></marker>
+      <marker id="me" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk-e" d="M0,0 L10,5 L0,10 z"/></marker>
+    </defs>`;
+  lanes.forEach((id) => {
+    const L = LANE[id], x = xOf(id);
+    svg += `<g class="lane-head"><line class="lifeline" x1="${x}" y1="58" x2="${x}" y2="${H - 8}" style="stroke:${L.color}"/>
+      <rect x="${x - 58}" y="10" width="116" height="46" rx="10" style="stroke:${L.color}"/>
+      <text class="t1" x="${x}" y="31" text-anchor="middle">${esc(L.label)}</text>
+      <text class="t2" x="${x}" y="46" text-anchor="middle">${esc(L.sub)}</text></g>`;
+  });
+  flow.steps.forEach((s, i) => {
+    const y = top + i * rowH + rowH / 2, yTop = top + i * rowH;
+    const kind = s.kind === 'db' ? 'k-db' : s.kind === 'err' ? 'k-err' : 'k-n';
+    const mk = s.kind === 'db' ? 'md' : s.kind === 'err' ? 'me' : 'mn';
+    const x1 = xOf(s.f), x2 = xOf(s.t);
+    let shape, label;
+    if (s.f === s.t) {
+      const last = lanes.indexOf(s.f) === n - 1, d = last ? -1 : 1;
+      shape = `<path class="arrow" marker-end="url(#${mk})" d="M ${x1} ${y - 11} h ${d * 36} v 22 h ${-d * 32}"/>`;
+      label = `<text class="lbl" x="${x1 + d * 44}" y="${y + 4}" text-anchor="${last ? 'end' : 'start'}">${esc(s.label)}</text>`;
+    } else {
+      const dir = x2 > x1 ? 1 : -1;
+      shape = `<line class="arrow" marker-end="url(#${mk})" x1="${x1 + dir * 4}" y1="${y}" x2="${x2 - dir * 4}" y2="${y}"/>`;
+      label = `<text class="lbl" x="${(x1 + x2) / 2}" y="${y - 9}" text-anchor="middle">${esc(s.label)}</text>`;
+    }
+    svg += `<g class="step future ${kind} ${s.ret ? 'ret' : ''}" data-i="${i}" tabindex="0" role="button" aria-label="Step ${i + 1}: ${esc(s.title || s.label)}">
+      <rect class="hit" x="0" y="${yTop}" width="${W}" height="${rowH}"/>
+      ${shape}${label}
+      <circle class="badge" cx="20" cy="${y}" r="12"/><text class="bn" x="20" y="${y + 4}">${i + 1}</text></g>`;
+  });
+  svg += '</svg>';
+
+  const layout = document.createElement('div');
+  layout.className = 'flowlayout';
+  layout.innerHTML = `<div class="flowdiagram">${svg}</div>
+    <aside class="flowdetail" aria-live="polite">
+      <div class="controls">
+        <button data-act="prev">◀ Prev</button><button data-act="next" class="active">Next ▶</button>
+        <button data-act="play">▶ Play</button><button data-act="reset">↺</button>
+        <span class="stepcount"></span>
+      </div>
+      <div class="detail"></div>
+    </aside>`;
+  host.appendChild(layout);
+
+  const stepEls = [...layout.querySelectorAll('.step')];
+  const detail = layout.querySelector('.detail');
+  const count = layout.querySelector('.stepcount');
+  const btn = (a) => layout.querySelector(`[data-act="${a}"]`);
+  let idx = -1, timer = null;
+
+  function stopPlay() { clearInterval(timer); timer = null; btn('play').textContent = '▶ Play'; }
+  function show(i, scroll) {
+    idx = Math.max(-1, Math.min(flow.steps.length - 1, i));
+    stepEls.forEach((el, k) => {
+      el.classList.toggle('future', k > idx);
+      el.classList.toggle('current', k === idx);
+    });
+    btn('prev').disabled = idx < 0;
+    btn('next').disabled = idx >= flow.steps.length - 1;
+    count.textContent = idx < 0 ? `${flow.steps.length} steps` : `Step ${idx + 1} of ${flow.steps.length}`;
+    if (idx < 0) {
+      detail.innerHTML = `<h4>${esc(flow.name)}</h4><p>${flow.intro || ''}</p><p class="lead" style="margin:0">Press <b>Next</b> or <b>Play</b>. You can also click any step in the diagram.</p>`;
+    } else {
+      const s = flow.steps[idx];
+      detail.innerHTML = `<h4>${esc(s.title || s.label)}</h4>${s.text ? `<p>${s.text}</p>` : ''}`;
+      if (s.code) { const c = document.createElement('code'); c.className = 'coderef'; c.textContent = s.code; detail.appendChild(c); }
+      if (s.data) { const p = document.createElement('pre'); p.textContent = s.data; detail.appendChild(p); }
+      if (scroll) ensureVisible(stepEls[idx], layout.querySelector('.flowdetail'));
+    }
+    if (idx >= flow.steps.length - 1) stopPlay();
+  }
+  stepEls.forEach((el, k) => {
+    el.addEventListener('click', () => { stopPlay(); show(k, false); });
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); stopPlay(); show(k, false); } });
+  });
+  btn('prev').onclick = () => { stopPlay(); show(idx - 1, true); };
+  btn('next').onclick = () => { stopPlay(); show(idx + 1, true); };
+  btn('reset').onclick = () => { stopPlay(); show(-1, false); };
+  btn('play').onclick = () => {
+    if (timer) { stopPlay(); return; }
+    if (idx >= flow.steps.length - 1) show(-1, false);
+    btn('play').textContent = '⏸ Pause';
+    timer = setInterval(() => show(idx + 1, true), 2600);
+  };
+  show(-1, false);
+}
+
+function mountFlowSection(id) {
+  const host = document.getElementById('flow-' + id);
+  const pills = document.getElementById('pills-' + id);
+  const flows = FLOWS[id];
+  const pick = (k) => {
+    if (pills) [...pills.children].forEach((b, j) => b.classList.toggle('active', j === k));
+    renderFlow(host, flows[k]);
+  };
+  if (pills) flows.forEach((f, k) => {
+    const b = document.createElement('button'); b.className = 'chip'; b.textContent = f.name; b.onclick = () => pick(k); pills.appendChild(b);
+  });
+  pick(0);
+}
+Object.keys(FLOWS).forEach(mountFlowSection);
+
+/* =====================================================================
+   Context & memory simulator
+   ===================================================================== */
+(() => {
+  const SYSTEM = 'You are a helpful, concise assistant in a chat application. …';
+  let rows = [], nextId = 1, title = 'New chat', payload = null;
+  const $ = (id) => document.getElementById(id);
+  function render() {
+    const W = +$('win').value;
+    const start = Math.max(0, rows.length - W);
+    $('memTable').innerHTML = '<tr><th>id</th><th>role</th><th>content</th><th>sent?</th></tr>' +
+      rows.map((r, i) => `<tr class="${i < start ? 'dim' : ''}"><td>${r.id}</td><td>${r.role}</td><td>${esc(r.content)}</td><td>${i < start ? 'no (outside window)' : 'yes'}</td></tr>`).join('');
+    $('memTitle').textContent = title;
+    $('memPayload').textContent = payload ? JSON.stringify(payload, null, 1) : '(send a message)';
+  }
+  function send() {
+    const text = $('memInput').value.trim();
+    if (!text) return;
+    $('memInput').value = '';
+    if (title === 'New chat') { const one = text.replace(/\s+/g, ' '); title = one.length <= 50 ? one : one.slice(0, 49) + '…'; }
+    rows.push({ id: nextId++, role: 'user', content: text });          // 1. save user message first
+    const W = +$('win').value;
+    const ctx = rows.slice(-W).map(({ role, content }) => ({ role, content })); // 2. last N rows
+    payload = [{ role: 'system', content: SYSTEM }, ...ctx];             // 3. what the model sees
+    const n = rows.filter((r) => r.role === 'assistant').length + 1;
+    rows.push({ id: nextId++, role: 'assistant', content: `Reply #${n} (to "${text.slice(0, 24)}${text.length > 24 ? '…' : ''}")` }); // 4. save reply
+    render();
+  }
+  $('memSend').onclick = send;
+  $('memInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+  $('win').onchange = render;
+  $('memReset').onclick = () => { rows = []; nextId = 1; title = 'New chat'; payload = null; render(); };
+  render();
+})();
+
+/* =====================================================================
+   SSE playground (mirrors chatService.ts)
+   ===================================================================== */
+(() => {
+  const CHUNKS = [
+    'data: {"delta": "He',
+    'llo"}\n\nda',
+    'ta: {"delta": " wor"}\n\ndata: {"del',
+    'ta": "ld"}\n\nevent: do',
+    'ne\ndata: {}\n\n'
+  ];
+  const $ = (id) => document.getElementById(id);
+  const vis = (s) => s.replace(/\n/g, '⏎\n');
+  let k, buffer, frames, ui, finished, error;
+  function reset() { k = 0; buffer = ''; frames = []; ui = ''; finished = false; error = ''; draw(null, []); }
+  function handleFrame(frame) {
+    let ev = 'message', data = '';
+    frame.split('\n').forEach((l) => { if (l.startsWith('event: ')) ev = l.slice(7); else if (l.startsWith('data: ')) data += l.slice(6); });
+    if (!data) return;
+    const p = JSON.parse(data);
+    if (ev === 'done') finished = true; else if (p.delta) ui += p.delta;
+    frames.push(`[${ev}] ${data}`);
+  }
+  function draw(raw, newFrames) {
+    $('sseRaw').textContent = raw === null ? '(none yet)' : `read #${k}\n` + vis(raw);
+    $('sseBuf').textContent = JSON.stringify(buffer).replace(/\\n/g, '⏎');
+    $('sseFrames').textContent = frames.length ? frames.map((f, i) => (newFrames.includes(i) ? '▶ ' : '  ') + f).join('\n') : '(none)';
+    $('sseUi').textContent = ui || '(empty bubble)';
+    const total = $('sseCut').checked ? CHUNKS.length - 1 : CHUNKS.length;
+    let status = '';
+    if (k >= total) status = finished ? 'Stream complete: done frame received.' : 'Connection closed WITHOUT a done frame → "The response was interrupted. Please retry." (partial text stays).';
+    $('sseStatus').textContent = status;
+    $('sseNext').disabled = k >= total;
+  }
+  $('sseNext').onclick = () => {
+    const total = $('sseCut').checked ? CHUNKS.length - 1 : CHUNKS.length;
+    if (k >= total) return;
+    const raw = CHUNKS[k++]; buffer += raw;
+    const before = frames.length; let end;
+    while ((end = buffer.indexOf('\n\n')) !== -1) { handleFrame(buffer.slice(0, end)); buffer = buffer.slice(end + 2); }
+    draw(raw, frames.map((_, i) => i).filter((i) => i >= before));
+  };
+  $('sseReset').onclick = reset; $('sseCut').onchange = reset;
+  reset();
+})();
+
+/* =====================================================================
+   Database write points
+   ===================================================================== */
+(() => {
+  const W = [
+    { n: '1. Create chat', when: 'On your <b>first message</b> in a new chat (lazy), via POST /conversations.', sql: "INSERT INTO conversations (id, title, created_at, updated_at)\nVALUES ('<uuid>', 'New chat', now, now)", code: 'routers/conversations.py: create_conversation', refresh: 'The empty chat exists, but the next step happens right away, so you never see an empty one.' },
+    { n: '2. Save user message', when: 'When the stream request arrives and passes validation: <b>before</b> the provider is called.', sql: "UPDATE conversations SET title = <first 50 chars>, updated_at = now   -- only if title is 'New chat'\nINSERT INTO messages (conversation_id, role, content, client_id)\nVALUES (<id>, 'user', <text>, <client_message_id>)\nCOMMIT", code: 'routers/conversations.py: send_message', refresh: 'Even if the provider fails, a refresh shows your message with no answer under it.' },
+    { n: '3. Save assistant reply', when: 'In the stream\'s <code>finally</code>: on completion, on error, on Stop, and on disconnect. Skipped if no text arrived.', sql: "INSERT INTO messages (conversation_id, role, content)\nVALUES (<id>, 'assistant', <all text streamed so far>)\nUPDATE conversations SET updated_at = now\nCOMMIT   -- in a NEW session", code: 'streaming.py: sse_events → routers/conversations.py: _save_assistant_message', refresh: 'A refresh shows exactly the text that had streamed, complete or partial.' },
+    { n: '4. Retry replaces', when: 'When a message id that already exists is sent again.', sql: "-- found: SELECT ... WHERE client_id = <same id>\nDELETE FROM messages\nWHERE conversation_id = <id> AND id > <id of that user message>", code: 'routers/conversations.py: existing is not None', refresh: 'The partial or failed answer disappears; a new one is saved at the end of the next stream.' },
+    { n: '5. Delete chat', when: 'Clear Chat or the × button, after a confirmation.', sql: "DELETE FROM messages WHERE conversation_id = <id>   -- ORM cascade / FK cascade\nDELETE FROM conversations WHERE id = <id>", code: 'routers/conversations.py: delete_conversation', refresh: 'The chat is gone for good, including after a server restart.' }
+  ];
+  const pills = document.getElementById('writePills'), box = document.getElementById('writeDetail');
+  function pick(i) {
+    [...pills.children].forEach((b, j) => b.classList.toggle('active', i === j));
+    const w = W[i];
+    box.innerHTML = `<p><b>When:</b> ${w.when}</p><p><b>Code:</b> <code>${esc(w.code)}</code></p><p><b>Equivalent SQL:</b></p><pre>${esc(w.sql)}</pre><p><b>What a refresh shows:</b> ${w.refresh}</p>`;
+  }
+  W.forEach((w, i) => { const b = document.createElement('button'); b.className = 'chip'; b.textContent = w.n; b.onclick = () => pick(i); pills.appendChild(b); });
+  pick(0);
+})();
+
+/* =====================================================================
+   UI state machine
+   ===================================================================== */
+(() => {
+  const S = {
+    idle:      { x: 20,  y: 120, label: 'Idle',      desc: 'Nothing in flight. You can type, switch chats, and delete.', vars: { loading: 'false', error: 'null', button: 'Send', 'typing dots': 'hidden', 'sidebar / Clear Chat': 'enabled' } },
+    waiting:   { x: 275, y: 120, label: 'Waiting',   desc: 'The request is out and no token has arrived. The user bubble is shown with the typing dots. In a brand-new chat this state first covers creating the conversation (a few milliseconds), during which Stop does nothing because there is no stream to abort yet.', vars: { loading: 'true', error: 'null', button: 'Stop', 'typing dots': 'visible', 'sidebar / Clear Chat': 'disabled' } },
+    streaming: { x: 530, y: 120, label: 'Streaming', desc: 'Tokens are arriving and the assistant bubble grows. The dots are gone because the growing bubble is the progress indicator.', vars: { loading: 'true', error: 'null', button: 'Stop', 'typing dots': 'hidden (last message is the assistant\'s)', 'sidebar / Clear Chat': 'disabled' } },
+    error:     { x: 275, y: 230, label: 'Error',     desc: 'A failure ended the request. A partial bubble may remain (a mid-stream failure). The red box shows a safe message. Retry appears when an open chat has a last user message.', vars: { loading: 'false', error: 'safe message string', button: 'Send', 'typing dots': 'hidden', Retry: 'visible (needs an open chat + last user message)', 'sidebar / Clear Chat': 'enabled' } }
+  };
+  // Hand-routed so no arrow passes through a box and no labels collide.
+  const ED = [
+    { id: 'send',  d: 'M 170 140 L 273 140',                   lbl: 'Send',              lx: 222, ly: 130 },
+    { id: 'stop',  d: 'M 275 160 L 172 160',                   lbl: 'Stop',              lx: 222, ly: 178 },
+    { id: 'first', d: 'M 425 140 L 528 140',                   lbl: 'First token',       lx: 477, ly: 130 },
+    { id: 'done',  d: 'M 605 118 C 605 34, 95 34, 95 118',     lbl: 'Done / Stop',       lx: 350, ly: 42 },
+    { id: 'herr',  d: 'M 335 182 L 335 228',                   lbl: 'HTTP error',        lx: 327, ly: 210, anchor: 'end' },
+    { id: 'retry', d: 'M 365 228 L 365 182',                   lbl: 'Retry / send',      lx: 373, ly: 210, anchor: 'start' },
+    { id: 'serr',  d: 'M 605 182 C 605 262, 520 262, 427 262', lbl: 'Error event / cut', lx: 548, ly: 288 }
+  ];
+  const EV = [
+    { from: 'idle', to: 'waiting', ev: 'Send a message', edge: 'send', note: 'handleSend adds the user bubble and sends the stream request (in a brand-new chat it first creates the conversation).' },
+    { from: 'waiting', to: 'streaming', ev: 'First token arrives', edge: 'first', note: 'The first delta creates the assistant bubble; the typing dots disappear.' },
+    { from: 'waiting', to: 'error', ev: 'HTTP error / create fails / network down', edge: 'herr', note: 'No assistant bubble is created. Retry appears, unless the conversation could not even be created (then nothing was sent, so there is nothing to retry).' },
+    { from: 'waiting', to: 'idle', ev: 'Stop', edge: 'stop', note: 'The AbortError is ignored (Stop is a choice, not a failure). Nothing had streamed, so nothing is kept.' },
+    { from: 'streaming', to: 'idle', ev: 'Done', edge: 'done', note: 'The done frame arrived. The reply is saved server-side and the sidebar refreshes.' },
+    { from: 'streaming', to: 'idle', ev: 'Stop', edge: 'done', note: 'AbortError ignored. The partial text stays on screen and is saved by the server, so a refresh shows the same text.' },
+    { from: 'streaming', to: 'error', ev: 'Error event / connection cut', edge: 'serr', note: 'The partial text stays; the error box and Retry appear. The server saved the partial text too.' },
+    { from: 'error', to: 'waiting', ev: 'Retry', edge: 'retry', note: 'The same message id is re-sent. The server replaces any partial answer instead of duplicating the message.' },
+    { from: 'error', to: 'waiting', ev: 'Send a new message', edge: 'retry', note: 'The error is cleared and a normal new send begins.' }
+  ];
+  const BW = 150, BH = 60;
+  const $ = (id) => document.getElementById(id);
+  let cur = 'idle', lastEdge = null;
+  function draw() {
+    let g = '<defs><marker id="sm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8a94a6"/></marker></defs>';
+    ED.forEach((e) => {
+      const on = lastEdge === e.id;
+      g += `<path class="edge ${on ? 'on' : ''}" d="${e.d}" marker-end="url(#sm)"/>`;
+      g += `<text class="elbl ${on ? 'on' : ''}" x="${e.lx}" y="${e.ly}" style="text-anchor:${e.anchor || 'middle'}">${esc(e.lbl)}</text>`;
+    });
+    Object.keys(S).forEach((k) => {
+      g += `<g class="st ${cur === k ? 'on' : ''}"><rect x="${S[k].x}" y="${S[k].y}" width="${BW}" height="${BH}" rx="12"/><text x="${S[k].x + BW / 2}" y="${S[k].y + BH / 2 + 5}">${S[k].label}</text></g>`;
+    });
+    $('smSvg').innerHTML = g;
+    $('smName').textContent = S[cur].label;
+    $('smDesc').textContent = S[cur].desc;
+    $('smVars').innerHTML = Object.entries(S[cur].vars).map(([k, v]) => `<b>${esc(k)}</b><span>${esc(v)}</span>`).join('');
+    $('smEvents').innerHTML = '';
+    EV.filter((e) => e.from === cur).forEach((e) => {
+      const b = document.createElement('button');
+      b.textContent = e.ev + ' → ' + S[e.to].label;
+      b.onclick = () => { cur = e.to; lastEdge = e.edge; draw(); $('smLast').textContent = 'What happened: ' + e.note; };
+      $('smEvents').appendChild(b);
+    });
+    if (lastEdge === null) $('smLast').textContent = 'Pick an event to move the chat screen to its next state.';
+  }
+  $('smReset').onclick = () => { cur = 'idle'; lastEdge = null; draw(); };
+  draw();
+})();
+
+/* =====================================================================
+   Security layers
+   ===================================================================== */
+(() => {
+  const L = [
+    { n: '1 Browser limits', stops: 'Blank sends, over-long text (maxLength 4000 + live counter), double-submit while a reply is loading.', where: 'ChatInput.tsx: canSend, maxLength', bypass: 'Yes, trivially (curl, devtools). This layer is user experience, not security.' },
+    { n: '2 CORS', stops: 'Other websites\' JavaScript reading your API from a visitor\'s browser. Only localhost:5173 and 127.0.0.1:5173 are allowed; methods GET, POST, DELETE.', where: 'main.py: CORSMiddleware', bypass: 'Not a barrier for curl or servers: CORS is enforced only by browsers. Never treat it as authentication.' },
+    { n: '3 Pydantic validation', stops: 'Bad roles, blank or over-long content, bad ids, wrong shapes. Invalid input returns 422 and the route never runs, so nothing is stored and no tokens are spent.', where: 'schemas.py: MessageContent, NewMessageRequest, ChatRequest', bypass: 'No. This is the real boundary for input size and shape.' },
+    { n: '4 Server-owned context', stops: 'Forged "assistant" turns, injected "system" messages, oversized history. The client sends only the new text; the server loads context from its own rows and prepends the system prompt.', where: 'routers/conversations.py: _recent_context · openai_service.py: SYSTEM_PROMPT', bypass: 'No. (A user can still try to talk the model into ignoring instructions: that is prompt injection, which a system prompt alone does not fully prevent.)' },
+    { n: '5 Cost caps', stops: 'Runaway cost: last 20 messages only, max 800 reply tokens, 30 s timeout, 2 retries, Stop closes the upstream stream.', where: 'schemas.py: MAX_HISTORY_MESSAGES · openai_service.py: MAX_OUTPUT_TOKENS, REQUEST_TIMEOUT_SECONDS', bypass: 'No, but there is no per-user rate limit yet.' },
+    { n: '6 Safe errors', stops: 'Leaking internals. Provider exceptions become fixed, friendly messages; upstream text and stack traces never reach the client.', where: 'openai_service.py: _translate', bypass: 'No.' },
+    { n: '7 Log hygiene', stops: 'Secrets and private conversations in log files. Only exception types and status codes are logged, never message text or keys.', where: 'openai_service.py, routers/conversations.py (logger usage)', bypass: 'No.' },
+    { n: '8 Secrets', stops: 'Key leaks. The key lives only in backend/.env (gitignored); the frontend never has it. Vite exposes only VITE_ variables, so secrets must never use that prefix.', where: '.gitignore · database/openai_service env reads', bypass: 'Only by human error. If a key is ever pasted anywhere, revoke it.' },
+    { n: '9 Authentication', missing: true, stops: 'NOT BUILT. Anyone who can reach the API can list, read and delete every conversation. Conversation ids are unguessable UUIDs, but that is not access control.', where: 'Would go in front of every /conversations route', bypass: 'Required before deployment: user accounts, ownership checks on every conversation query, per-user rate limits.' }
+  ];
+  const pills = document.getElementById('layerPills'), box = document.getElementById('layerDetail');
+  function pick(i) {
+    [...pills.children].forEach((b, j) => b.classList.toggle('on', i === j));
+    const l = L[i];
+    box.innerHTML = `<div class="note ${l.missing ? 'bad' : 'good'}"><b>${esc(l.n)}</b></div><p><b>${l.missing ? 'Gap' : 'Stops'}:</b> ${esc(l.stops)}</p><p><b>Where:</b> <code>${esc(l.where)}</code></p><p><b>Can it be bypassed?</b> ${esc(l.bypass)}</p>`;
+  }
+  L.forEach((l, i) => { const b = document.createElement('button'); b.className = 'chip layer' + (l.missing ? ' missing' : ''); b.textContent = l.n; b.onclick = () => pick(i); pills.appendChild(b); });
+  pick(0);
+})();
+
+/* =====================================================================
+   Endpoint reference
+   ===================================================================== */
+(() => {
+  const R = [
+    { g: 'Stateless', m: 'GET', p: '/health', req: '-', val: '-', db: 'none', ok: '200 {"status":"ok"}', err: '-' },
+    { g: 'Stateless', m: 'POST', p: '/chat', req: '{messages:[{role,content}]} (whole history)', val: 'roles user/assistant; 1 to 20 messages; content 1 to 4000; last message from user', db: 'none', ok: '200 {"reply"}', err: '422, 429, 500, 502, 504' },
+    { g: 'Stateless', m: 'POST', p: '/chat/stream', req: 'same as /chat', val: 'same as /chat', db: 'none', ok: '200 SSE: delta…, done', err: 'before stream: 422/429/500/502/504 · after: event: error' },
+    { g: 'Conversations', m: 'GET', p: '/conversations', req: '-', val: '-', db: 'SELECT newest 100', ok: '200 [summary…]', err: '-' },
+    { g: 'Conversations', m: 'POST', p: '/conversations', req: '(no body)', val: '-', db: 'INSERT conversation', ok: '201 summary', err: '-' },
+    { g: 'Conversations', m: 'GET', p: '/conversations/{id}', req: '-', val: '-', db: 'SELECT chat + messages', ok: '200 {…, messages}', err: '404' },
+    { g: 'Conversations', m: 'DELETE', p: '/conversations/{id}', req: '-', val: '-', db: 'DELETE chat (cascade)', ok: '204', err: '404' },
+    { g: 'Conversations', m: 'POST', p: '/conversations/{id}/messages/stream', req: '{content, client_message_id}', val: 'content 1 to 4000, not blank; id 8 to 64 chars', db: 'INSERT user (or replace on retry); SELECT last 20; INSERT assistant at end', ok: '200 SSE: delta…, done', err: 'before stream: 404/422/429/500/502/504 · after: event: error' }
+  ];
+  const pills = document.getElementById('epPills'), table = document.getElementById('epTable');
+  const groups = ['All', 'Conversations', 'Stateless'];
+  function pick(g) {
+    [...pills.children].forEach((b) => b.classList.toggle('active', b.textContent === g));
+    table.innerHTML = '<tr><th>Method</th><th>Path</th><th>Request body</th><th>Validation</th><th>Database effect</th><th>Success</th><th>Errors</th></tr>' +
+      R.filter((r) => g === 'All' || r.g === g).map((r) => `<tr><td><code>${r.m}</code></td><td><code>${esc(r.p)}</code></td><td>${esc(r.req)}</td><td>${esc(r.val)}</td><td>${esc(r.db)}</td><td>${esc(r.ok)}</td><td>${esc(r.err)}</td></tr>`).join('');
+  }
+  groups.forEach((g) => { const b = document.createElement('button'); b.className = 'chip'; b.textContent = g; b.onclick = () => pick(g); pills.appendChild(b); });
+  pick('Conversations');
+})();
+
+/* =====================================================================
+   Tabs + theme
+   ===================================================================== */
+const panels = [...document.querySelectorAll('section.panel')];
+const tabs = document.getElementById('tabs');
+function showPanel(id, initial) {
+  panels.forEach((p) => p.classList.toggle('active', p.id === id));
+  [...tabs.children].forEach((b) => b.classList.toggle('active', b.dataset.id === id));
+  // Not on the initial render: writing a hash while loading makes the browser jump
+  // to that section's top once loading completes, hiding the heading under the header.
+  if (initial) return;
+  try { history.replaceState(null, '', '#' + id); } catch (e) {}
+  window.scrollTo(0, 0);
+}
+panels.forEach((p) => {
+  const b = document.createElement('button');
+  b.textContent = p.dataset.title; b.dataset.id = p.id; b.onclick = () => showPanel(p.id);
+  tabs.appendChild(b);
+});
+showPanel(panels.some((p) => p.id === location.hash.slice(1)) ? location.hash.slice(1) : 'overview', true);
+
+const themeBtn = document.getElementById('theme');
+let theme = null;
+try { theme = localStorage.getItem('theme'); } catch (e) {}
+function applyTheme() {
+  const dark = theme ? theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  themeBtn.textContent = dark ? 'Light mode' : 'Dark mode';
+}
+themeBtn.onclick = () => {
+  theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem('theme', theme); } catch (e) {}
+  applyTheme();
+};
+applyTheme();
+
+/* exposed for automated checks */
+window.__flows = FLOWS; window.__lanes = LANE;
+</script>
+</body>
+</html>

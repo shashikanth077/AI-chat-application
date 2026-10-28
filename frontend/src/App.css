@@ -1,9 +1,10 @@
+.shell { display: flex; height: 100dvh; }
+
 .app {
   display: flex;
   flex-direction: column;
-  height: 100dvh;
-  max-width: 800px;
-  margin: 0 auto;
+  flex: 1;
+  min-width: 0;
   background: var(--surface);
 }
 
@@ -11,15 +12,17 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  gap: 8px;
+  padding: 12px max(16px, calc((100% - 800px) / 2));
   border-bottom: 1px solid #e5e7eb;
 }
-.header h1 { margin: 0; font-size: 1.1rem; }
+.header h1 { margin: 0; font-size: 1.1rem; flex: 1; }
+.menu { display: none; }
 
 .message-list {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 16px max(16px, calc((100% - 800px) / 2));
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -64,7 +67,7 @@
 .chat-input {
   display: flex;
   gap: 8px;
-  padding: 12px 16px;
+  padding: 12px max(16px, calc((100% - 800px) / 2));
   border-top: 1px solid #e5e7eb;
 }
 .chat-input textarea {
@@ -87,6 +90,42 @@ button {
 }
 button.secondary { background: transparent; color: var(--text); border: 1px solid #d1d5db; padding: 6px 12px; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Sidebar */
+.sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: #f9fafb;
+  border-right: 1px solid #e5e7eb;
+  overflow-y: auto;
+}
+.sidebar ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.sidebar li { display: flex; align-items: center; border-radius: 8px; }
+.sidebar li.active { background: var(--accent-soft, #e0e7ff); }
+.sidebar li:hover { background: #eef0f4; }
+.new-chat { padding: 10px; }
+.conv-title {
+  flex: 1; min-width: 0; text-align: left; background: none; color: var(--text);
+  padding: 8px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.conv-delete { background: none; color: var(--muted); padding: 4px 10px; font-size: 1.1rem; }
+.conv-delete:hover:not(:disabled) { color: var(--danger); }
+.empty-list { color: var(--muted); font-size: 0.85rem; padding: 8px 10px; }
+.backdrop { display: none; }
+
+@media (max-width: 700px) {
+  .menu { display: inline-block; }
+  .sidebar {
+    position: fixed; inset: 0 auto 0 0; z-index: 20; width: min(280px, 85vw);
+    transform: translateX(-100%); transition: transform 0.2s;
+  }
+  .sidebar.open { transform: none; }
+  .backdrop { display: block; position: fixed; inset: 0; z-index: 10; background: rgba(0, 0, 0, 0.4); }
+}
 
 @media (max-width: 600px) {
   .bubble { max-width: 90%; }

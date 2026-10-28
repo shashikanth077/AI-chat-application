@@ -6,7 +6,7 @@ interface Props {
   messages: ChatMessage[];
   loading: boolean;
   error: string | null;
-  onRetry: () => void;
+  onRetry?: () => void; // omitted when there is nothing to retry
 }
 
 export function MessageList({ messages, loading, error, onRetry }: Props) {
@@ -40,7 +40,9 @@ export function MessageList({ messages, loading, error, onRetry }: Props) {
       {error && (
         <div className="error" role="alert">
           <span>{error}</span>
-          <button className="secondary" onClick={onRetry} disabled={loading}>Retry</button>
+          {onRetry && (
+            <button className="secondary" onClick={onRetry} disabled={loading}>Retry</button>
+          )}
         </div>
       )}
       <div ref={bottomRef} />

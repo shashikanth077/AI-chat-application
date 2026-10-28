@@ -28,3 +28,17 @@ def fake_openai(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     )
     monkeypatch.setattr(openai_service, "_client", fake)
     return fake
+
+
+@pytest.fixture
+def db(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    """A throwaway SQLite file per test, swapped in for the real database."""
+    import database
+    import models  # noqa: F401  (registers the tables)
+
+    engine = database.make_engine(f"sqlite:///{tmp_path / 'test.db'}")
+    database.Base.metadata.create_all(engine)
+    monkeypatch.setattr(database, "engine", engine)
+    monkeypatch.setattr(database, "SessionLocal", database.sessionmaker(bind=engine, expire_on_commit=False))
+    yield database
+    engine.dispose()

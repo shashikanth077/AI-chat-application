@@ -44,3 +44,8 @@
 1. Why Server-Sent Events instead of WebSockets for streaming a chat reply, and when would you pick WebSockets?
 2. Once a streaming response has started with HTTP 200, how do you report a later failure, and what must the client do if the stream ends without a "done" event?
 3. What happens when the user clicks Stop or closes the tab, and how do you make sure the server stops paying for tokens nobody will read?
+
+## Phase 11
+1. Why should the server, not the client, own the conversation history, and what attacks or bugs does that prevent?
+2. How does sending a client-generated message id make retry safe (idempotent), and what would go wrong with a naive retry that just re-posts the message?
+3. Why SQLite for development with SQLAlchemy, what changes when you move to PostgreSQL, and what is missing before you could deploy this (authentication, ownership checks, migrations)?

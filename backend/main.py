@@ -1,5 +1,6 @@
-import json
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -9,16 +10,26 @@ from fastapi.responses import StreamingResponse
 # Must run before the service reads os.getenv(). Loads backend/.env if present.
 load_dotenv()
 
+from database import init_db  # noqa: E402
+from routers import conversations  # noqa: E402
 from schemas import ChatRequest, ChatResponse  # noqa: E402
 from services.openai_service import (  # noqa: E402
     ChatServiceError,
     generate_reply,
     open_reply_stream,
 )
+from streaming import sse_response  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 
-app = FastAPI(title="AI Chat API")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    init_db()  # creates the tables on first run
+    yield
+
+
+app = FastAPI(title="AI Chat API", lifespan=lifespan)
 
 # CORS: the browser blocks cross-origin calls unless the server opts in.
 # React (localhost:5173) and FastAPI (localhost:8000) are different origins.
@@ -26,9 +37,11 @@ app = FastAPI(title="AI Chat API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type"],
 )
+
+app.include_router(conversations.router)
 
 
 @app.get("/health")
@@ -36,6 +49,8 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+# Stateless endpoints from Phases 6 and 10: the client supplies the whole
+# history. The chat UI now uses /conversations/{id}/messages/stream instead.
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest) -> ChatResponse:
     try:
@@ -45,34 +60,10 @@ def chat(request: ChatRequest) -> ChatResponse:
     return ChatResponse(reply=reply)
 
 
-def _sse(data: dict[str, str], event: str | None = None) -> str:
-    """Format one Server-Sent Event. JSON keeps newlines in the text safe."""
-    prefix = f"event: {event}\n" if event else ""
-    return f"{prefix}data: {json.dumps(data)}\n\n"
-
-
 @app.post("/chat/stream")
 def chat_stream(request: ChatRequest) -> StreamingResponse:
-    # Errors before the first token still become normal HTTP errors.
     try:
         deltas = open_reply_stream(request.messages)
     except ChatServiceError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message)
-
-    def events():
-        # Once streaming starts the status is already 200, so a failure now
-        # can only be reported as an in-stream "error" event.
-        try:
-            for text in deltas:
-                yield _sse({"delta": text})
-            yield _sse({}, event="done")
-        except ChatServiceError as exc:
-            yield _sse({"detail": exc.message}, event="error")
-        finally:
-            deltas.close()  # stop the upstream request if the client left
-
-    return StreamingResponse(
-        events(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    return sse_response(deltas)
