@@ -42,3 +42,13 @@ def db(tmp_path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(database, "SessionLocal", database.sessionmaker(bind=engine, expire_on_commit=False))
     yield database
     engine.dispose()
+
+
+@pytest.fixture
+def rag(db, monkeypatch: pytest.MonkeyPatch):
+    """Database plus the offline hashing embedder: no model download, deterministic."""
+    from services import embeddings
+
+    monkeypatch.setenv("EMBEDDING_BACKEND", "hashing")
+    monkeypatch.setattr(embeddings, "_embedder", None)
+    return db

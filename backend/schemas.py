@@ -74,3 +74,32 @@ class StoredMessage(BaseModel):
 
 class ConversationDetail(ConversationSummary):
     messages: list[StoredMessage]
+
+
+# ---- Documents / retrieval (Phase 12) ----
+
+MAX_SEARCH_QUERY_CHARS = 500
+MAX_TOP_K = 10
+
+
+class DocumentSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    filename: str
+    size_bytes: int
+    chunk_count: int
+    created_at: datetime
+
+
+class SearchRequest(BaseModel):
+    query: Annotated[str, Field(min_length=1, max_length=MAX_SEARCH_QUERY_CHARS), AfterValidator(_not_blank)]
+    top_k: int = Field(default=4, ge=1, le=MAX_TOP_K)
+
+
+class SearchResult(BaseModel):
+    document_id: str
+    filename: str
+    position: int
+    text: str
+    score: float

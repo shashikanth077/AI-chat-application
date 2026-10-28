@@ -4,3 +4,7 @@ pydantic>=2.7
 openai>=1.40
 python-dotenv>=1.0
 sqlalchemy>=2.0
+fastembed>=0.4
+numpy>=1.26
+pypdf>=4.0
+python-multipart>=0.0.9

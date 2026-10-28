@@ -18,3 +18,6 @@ dist/
 
 # local database
 *.db
+
+# downloaded embedding model
+backend/.model_cache/

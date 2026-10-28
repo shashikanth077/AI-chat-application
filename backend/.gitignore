@@ -18,3 +18,4 @@ dist/
 
 # local database
 *.db
+.model_cache/

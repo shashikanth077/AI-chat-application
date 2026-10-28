@@ -1,4 +1,5 @@
 import type { ConversationSummary } from '../types/chat';
+import { DocumentsPanel } from './DocumentsPanel';
 
 interface Props {
   conversations: ConversationSummary[];
@@ -18,7 +19,7 @@ export function Sidebar({
     <>
       <aside className={`sidebar ${open ? 'open' : ''}`} aria-label="Conversations">
         <button className="new-chat" onClick={onNewChat} disabled={disabled}>+ New chat</button>
-        <ul>
+        <ul className="conv-list">
           {conversations.map((c) => (
             <li key={c.id} className={c.id === activeId ? 'active' : ''}>
               <button
@@ -41,6 +42,7 @@ export function Sidebar({
           ))}
           {conversations.length === 0 && <li className="empty-list">No saved chats yet.</li>}
         </ul>
+        <DocumentsPanel />
       </aside>
       {open && <div className="backdrop" onClick={onClose} />}
     </>

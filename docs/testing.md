@@ -48,3 +48,18 @@ The OpenAI client is mocked, so tests are free, offline and deterministic.
 | `database is locked` | Two processes writing at once | Run one backend instance; SQLite handles concurrent reads but serialises writes |
 | Old chats missing after changing `DATABASE_URL` | You are looking at a different database file | Point back to the original URL |
 | Table errors after changing a model | `create_all` never alters existing tables | Delete `chat.db` in development, or adopt Alembic migrations |
+
+## Documents checklist (Phase 12)
+1. Open the sidebar's **Documents** panel and upload a `.txt`, a `.md` and a `.pdf`. Each appears with a chunk count. The **first** upload is slow once: the embedding model downloads (~130 MB) and then loads.
+2. Search for a phrase that is in one document but worded differently (for example the document says "feline", you search "cat"). With the real model it should rank first; with `EMBEDDING_BACKEND=hashing` it will not, because that embedder only matches shared words.
+3. Search for something unrelated to every document. Results still appear, with low scores: top-k search always returns k results.
+4. Try an `.exe` (rejected in the browser), a binary file renamed `.txt` (rejected by the server: not valid UTF-8), and a scanned PDF (rejected: no extractable text).
+5. Refresh the page: documents persist. Delete one: it disappears from the list and from search.
+6. Inspect the data: `sqlite3 backend/chat.db "select filename, chunk_count, embedding_model from documents;"`
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| 503 "The embedding model is unavailable" | First run could not download the model (no internet, or the host `huggingface.co` is blocked) | Allow the download once; then it works offline from `backend/.model_cache/` |
+| Search returns nothing after changing `EMBEDDING_BACKEND` or model | Vectors from different models aren't comparable, so only documents embedded by the current model are searched | Re-upload the documents |
+| Upload fails with 413 | File over 2 MB | Split it |
+| Upload fails with 422 "No text could be extracted" | Scanned or image-only PDF | Run OCR first |
