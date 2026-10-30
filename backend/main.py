@@ -22,7 +22,7 @@ from schemas import (  # noqa: E402
     InfoLimits,
     InfoResponse,
 )
-from services.openai_service import (  # noqa: E402
+from services.llm import (  # noqa: E402
     ChatServiceError,
     generate_reply,
     open_reply_stream,

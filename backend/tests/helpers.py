@@ -1,9 +1,25 @@
 import json
 from unittest.mock import MagicMock
 
+from openai.types.chat import ChatCompletion, ChatCompletionChunk, ChatCompletionMessage
+from openai.types.chat.chat_completion import Choice as CompletionChoice
+from openai.types.chat.chat_completion_chunk import Choice, ChoiceDelta
+
 
 def chunk(text):
-    return MagicMock(choices=[MagicMock(delta=MagicMock(content=text))])
+    """A real SDK chunk object, because ChatOpenAI parses what the client returns."""
+    return ChatCompletionChunk(
+        id="c", created=0, model="m", object="chat.completion.chunk",
+        choices=[Choice(index=0, delta=ChoiceDelta(content=text))],
+    )
+
+
+def completion(text):
+    """A real SDK non-streaming response."""
+    return ChatCompletion(
+        id="c", created=0, model="m", object="chat.completion",
+        choices=[CompletionChoice(index=0, finish_reason="stop", message=ChatCompletionMessage(role="assistant", content=text))],
+    )
 
 
 class FakeStream:
@@ -12,6 +28,13 @@ class FakeStream:
     def __init__(self, items):
         self.items = items
         self.close = MagicMock()
+
+    # ChatOpenAI uses the stream as a context manager and closes it on exit.
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
 
     def __iter__(self):
         for item in self.items:

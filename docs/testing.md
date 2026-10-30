@@ -111,3 +111,8 @@ cd frontend && npm test
 - Check light and dark themes and a phone-width window (the sidebar becomes a drawer).
 - Demo build (`VITE_DEMO=true`): the banner shows, sample documents are listed, **Reset demo** clears chats and uploads, `.pdf` uploads are refused.
 - Automated version of most of this: `frontend/e2e/smoke.cjs` (see the README).
+
+## LangChain checks (Phase 15)
+- Automated: `tests/test_llm.py` (chain, prompt safety, config), `test_retriever.py`, `test_rewrite.py` (follow-ups, fallbacks, no extra call when not needed).
+- Manual, with a real key: ask about an uploaded document, then a vague follow-up such as "and how long do they nap?". The answer should still cite the right passage. Repeat with `RAG_REWRITE_QUERIES=false` to see the difference (the follow-up should find nothing).
+- Manual: stop a reply mid-stream, then check the partial text is kept; use a wrong `OPENAI_API_KEY` and confirm the UI shows "The server is not configured correctly." and no raw provider text.

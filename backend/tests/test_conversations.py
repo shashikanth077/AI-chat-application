@@ -6,7 +6,7 @@ from helpers import FakeStream, chunk, events
 from sqlalchemy import func, select
 
 from models import Message
-from services.openai_service import ChatServiceError
+from services.llm import ChatServiceError
 from streaming import sse_events
 
 REQ = httpx.Request("POST", "http://test")
@@ -200,13 +200,16 @@ def test_empty_model_reply_saves_no_assistant_message(client, db, fake_openai):
     assert stored(client, cid) == [("user", "hi")]
 
 
-def test_closing_the_stream_saves_the_partial_text():
+def test_closing_the_stream_saves_the_partial_text(fake_openai):
     """Stop / closed tab: the generator is closed after the first token."""
+    from schemas import ChatMessage
+    from services.llm import open_reply_stream
+
     saved = []
     stream = FakeStream([chunk("Hel"), chunk("lo")])
-    from services.openai_service import _iter_deltas
+    fake_openai.chat.completions.create.return_value = stream
 
-    frames = sse_events(_iter_deltas(stream), saved.append)
+    frames = sse_events(open_reply_stream([ChatMessage(role="user", content="hi")]), saved.append)
     next(frames)  # first token delivered
     frames.close()  # what Starlette does when the client disconnects
     assert saved == ["Hel"]

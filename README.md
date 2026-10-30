@@ -8,6 +8,7 @@
 ![React](https://img.shields.io/badge/React_19-20232a?logo=react&logoColor=61dafb)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178c6?logo=typescript&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![LangChain](https://img.shields.io/badge/LangChain-1c3c3c?logo=langchain&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-003b57?logo=sqlite&logoColor=white)
 
 ### [Try the live demo](https://shashikanth077.github.io/ai-chat-application/)
@@ -26,11 +27,11 @@
 
 ## Highlights
 - **Streaming** replies over Server-Sent Events, with Stop (the partial answer is kept) and a safe, duplicate-free **Retry** and **Regenerate** built on idempotent message ids
-- **RAG with citations**: upload `.txt`, `.md` or `.pdf`; answers cite numbered passages, and a click opens the exact text and relevance score
+- **RAG with citations**: upload `.txt`, `.md` or `.pdf`; answers cite numbered passages, and a click opens the exact text and relevance score. Follow-up questions are rewritten into standalone search queries first
 - **Safe markdown**: syntax-highlighted code, tables and lists. Raw HTML, images and `javascript:` links are rendered inert (covered by tests)
 - **Saved conversations** (SQLite), searchable, grouped by date, restored after a refresh; **export** any chat to Markdown
 - **Polish**: light/dark themes without a flash, collapsible sidebar, keyboard shortcuts, toasts, accessible modal and menus, responsive down to phones
-- **Engineering**: Pydantic validation, mapped HTTP errors, secrets never logged or sent to the browser, 237 automated tests and CI
+- **Engineering**: Pydantic validation, mapped HTTP errors, secrets never logged or sent to the browser, 256 automated tests and CI
 
 ## Quick start (full stack)
 ```bash
@@ -75,6 +76,20 @@ sequenceDiagram
     S-->>B: event: done
 ```
 
+## LangChain
+The model call, document search and a follow-up-question step run on LangChain, with the rule *change the plumbing, keep the contract*: the API, SSE frames, error mapping, SQLite tables and the React app are unchanged.
+
+```python
+chain = ChatPromptTemplate.from_messages([("system", "{system}"), MessagesPlaceholder("history")]) | ChatOpenAI(...) | StrOutputParser()
+```
+- **`services/llm.py`**: an LCEL chain. `ChatOpenAI` takes `OPENAI_BASE_URL`, so Groq and other OpenAI-compatible providers still work. System text is a variable and history is message objects, so braces in user text are never treated as template variables. `open_reply_stream` waits for the first piece of text, so a failure before it is still a proper HTTP error.
+- **`services/retriever.py`**: `SqliteRetriever(BaseRetriever)` wraps the existing cosine search; `.invoke(query)` returns `Document`s with filename, position and score in `metadata`.
+- **`services/rewrite.py`**: a vague follow-up ("and how long do they nap?") is rewritten into a standalone query using recent messages, **for searching only**; the model still gets your real message. It never blocks an answer (any failure falls back to the original question), is skipped when it can't help, and costs one small extra call (`RAG_REWRITE_QUERIES=false` turns it off).
+- **Deliberately not adopted:** LangChain's text splitter (the chunker is tested and mirrored in the demo with a parity test), document loaders (they need files on disk; uploads stay in memory), vector stores, LangGraph and LangSmith (it would send messages to a third party). Reasons are in `docs/AI-Chat-LangChain-Guide.html`.
+- **Tests** fake the OpenAI SDK at its lowest layer, so a real `ChatOpenAI` and the real chain run. Rewrite quality with a real model is **not measured**; the tests prove the plumbing and fallbacks. Pin exact dependency versions before deploying, since LangChain's API moves.
+
+The demo build is unaffected: its simulated assistant and client-side retrieval are not LangChain.
+
 ## Demo mode
 `VITE_DEMO=true` builds the frontend without a backend. A small in-browser stand-in (`frontend/src/demo/`) answers the same
 routes, so the real services, SSE parser and UI all run unchanged:
@@ -116,7 +131,8 @@ VITE_DEMO=true VITE_BASE=/ai-chat-application/ npm run build   # for GitHub Page
 | Persistence | `backend/database.py`, `backend/models.py` | SQLAlchemy; `conversations`, `messages`, `message_sources`, `documents`, `chunks` |
 | RAG | `backend/services/` | `chunking`, `embeddings`, `retrieval`, `rag` (threshold, prompt building, tag escaping) |
 | Schemas | `backend/schemas.py` | Pydantic request/response models and limits |
-| AI service | `backend/services/openai_service.py` | SDK client, prompt, error classification |
+| AI service | `backend/services/llm.py` | LangChain chain (prompt, `ChatOpenAI`, parser), streaming, error classification |
+| Retriever, rewrite | `backend/services/retriever.py`, `backend/services/rewrite.py` | The SQLite store as a LangChain retriever; follow-up questions rewritten before searching |
 
 ## Project structure
 ```
@@ -124,7 +140,7 @@ AI-chat-application/
 ├── frontend/          React + TypeScript + Vite
 │   ├── src/ (components/, hooks/, lib/, services/, demo/, types/, test/)
 │   └── e2e/smoke.cjs  Playwright smoke test (see Testing)
-├── backend/           FastAPI + Pydantic + OpenAI SDK
+├── backend/           FastAPI + Pydantic + LangChain
 │   ├── main.py  schemas.py  database.py  models.py  streaming.py
 │   ├── routers/  services/  tests/  tools/
 │   └── requirements.txt  requirements-dev.txt  .env.example
@@ -295,7 +311,7 @@ source .venv/bin/activate
 pip install -r requirements-dev.txt
 pytest -q
 ```
-The 103 tests cover validation, error mapping, safe error messages, CORS, streaming (including mid-stream failure and cancellation), conversation storage, idempotent retry, cascade deletes, document upload (text, markdown, PDF, limits, filename safety), chunking, embedding failures, similarity ranking, RAG prompt building (relevance threshold, prompt-injection escaping, citations surviving retries and document deletion), and that invalid input never reaches the model. Database tests use a throwaway SQLite file per test. See `docs/testing.md` for the manual end-to-end checklist.
+The 122 tests cover validation, error mapping, safe error messages, CORS, streaming (including mid-stream failure and cancellation), conversation storage, idempotent retry, cascade deletes, document upload (text, markdown, PDF, limits, filename safety), chunking, embedding failures, similarity ranking, RAG prompt building (relevance threshold, prompt-injection escaping, citations surviving retries and document deletion), and that invalid input never reaches the model. Database tests use a throwaway SQLite file per test. See `docs/testing.md` for the manual end-to-end checklist.
 
 ### Frontend
 ```bash
@@ -328,8 +344,9 @@ NODE_PATH=$(npm root -g) node frontend/e2e/smoke.cjs http://localhost:4173/ai-ch
 | Embeddings | `EMBEDDING_BACKEND`, `EMBEDDING_MODEL` in `.env` | `fastembed`, `BAAI/bge-small-en-v1.5` |
 | Relevance threshold | `RAG_MIN_SCORE` in `.env` | `0.5` for the default model (a starting point: tune it, see below) |
 | Passages per answer | `backend/services/rag.py` (`MAX_PASSAGES`) | 4 |
-| Max reply tokens | `backend/services/openai_service.py` | 800 |
-| Provider timeout / retries | `backend/services/openai_service.py` | 30 s / 2 |
+| Max reply tokens | `backend/services/llm.py` | 800 |
+| Provider timeout / retries | `backend/services/llm.py` | 30 s / 2 |
+| Rewrite follow-up questions before searching | `RAG_REWRITE_QUERIES` in `.env` | `true` (costs one extra small model call per follow-up) |
 
 Keep the message-length limit in `backend/schemas.py` and `frontend/src/constants.ts` in sync.
 To use PostgreSQL later, set `DATABASE_URL` (for example `postgresql+psycopg://user:pass@host/db`) and install the driver; the SQLAlchemy code is unchanged.
@@ -361,4 +378,5 @@ See [`docs/DEPLOY.md`](docs/DEPLOY.md): the demo on GitHub Pages (safe to make p
 - `docs/AI-Chat-Learning-Guide.html`: interactive walkthrough of how the app was built (Phases 1 to 9 concepts)
 - `docs/AI-Chat-Flows-Guide.html`: step-by-step sequence diagrams of every end-to-end flow in the current app (startup, send, streaming, Stop, failures and Retry, database, conversations, UI states, security, testing, endpoints)
 - `docs/AI-Chat-RAG-Flows-Guide.html`: the same style of guide for documents and RAG (upload and indexing, search and thresholds, answering with citations), with live labs for chunking, scoring, and prompt building
-- `docs/AI-Chat-Interview-Guide.pdf`: all 49 interview questions (Phases 1 to 14), with answers and diagrams
+- `docs/AI-Chat-LangChain-Guide.html`: the LangChain integration (Phase 15): the chain, retriever and query rewriting as step-through flows, a live rewrite lab, how it is tested, and what was deliberately not adopted
+- `docs/AI-Chat-Interview-Guide.pdf`: all 56 interview questions (Phases 1 to 15), with answers and diagrams

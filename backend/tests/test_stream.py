@@ -59,7 +59,19 @@ def test_upstream_error_text_never_reaches_client(client, fake_openai):
         [openai.InternalServerError("SECRET-UPSTREAM-TEXT", response=resp, body=None)]
     )
     r = client.post("/chat/stream", json=BODY)
-    assert events(r)[-1][0] == "error"
+    # Nothing was produced yet, so this is still an ordinary HTTP error, not an in-stream one.
+    assert r.status_code == 502
+    assert "SECRET" not in r.text
+
+
+def test_failure_after_the_first_token_is_an_error_event(client, fake_openai):
+    resp = httpx.Response(500, request=REQ)
+    fake_openai.chat.completions.create.return_value = FakeStream(
+        [chunk("Par"), openai.InternalServerError("SECRET-UPSTREAM-TEXT", response=resp, body=None)]
+    )
+    r = client.post("/chat/stream", json=BODY)
+    assert r.status_code == 200
+    assert events(r)[-1] == ("error", {"detail": "The AI service returned an error."})
     assert "SECRET" not in r.text
 
 
@@ -72,7 +84,7 @@ def test_empty_stream_is_an_error_event(client, fake_openai):
 def test_closing_the_generator_closes_the_upstream_stream(fake_openai):
     """Simulates the client disconnecting after the first token."""
     from schemas import ChatMessage
-    from services.openai_service import open_reply_stream
+    from services.llm import open_reply_stream
 
     stream = FakeStream([chunk("a"), chunk("b"), chunk("c")])
     fake_openai.chat.completions.create.return_value = stream

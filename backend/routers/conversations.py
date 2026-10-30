@@ -18,7 +18,7 @@ from schemas import (
 )
 from services import rag
 from services.embeddings import EmbeddingError
-from services.openai_service import ChatServiceError, open_reply_stream
+from services.llm import ChatServiceError, open_reply_stream
 from streaming import sse, sse_response
 
 logger = logging.getLogger(__name__)
@@ -162,7 +162,7 @@ def send_message(
     passages: list[SearchResult] | None = None
     if body.use_documents:
         try:
-            passages = rag.retrieve(db, context[-1].content)  # the newest user message
+            passages = rag.retrieve(db, context)
         except EmbeddingError:
             raise HTTPException(
                 status_code=503,

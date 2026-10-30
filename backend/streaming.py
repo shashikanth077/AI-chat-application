@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi.responses import StreamingResponse
 
-from services.openai_service import ChatServiceError
+from services.llm import ChatServiceError
 
 
 def sse(data: dict[str, Any], event: str | None = None) -> str:
