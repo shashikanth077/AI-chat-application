@@ -70,11 +70,9 @@ def test_send_streams_and_persists_both_messages_and_sets_title(client, db, fake
     cid = new_conversation(client)
     provider_says(fake_openai, "Hel", "lo")
     r = send(client, cid, "What is   FastAPI?\nExplain.")
-    assert events(r) == [
-        ("message", {"delta": "Hel"}),
-        ("message", {"delta": "lo"}),
-        ("done", {}),
-    ]
+    evs = events(r)
+    assert "".join(d["delta"] for name, d in evs if name == "message") == "Hello"
+    assert evs[-1] == ("done", {})
     assert stored(client, cid) == [("user", "What is   FastAPI?\nExplain."), ("assistant", "Hello")]
     assert client.get(f"/conversations/{cid}").json()["title"] == "What is FastAPI? Explain."
 

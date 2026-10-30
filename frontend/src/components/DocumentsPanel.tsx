@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, DragEvent, FormEvent } from 'react';
 import { ALLOWED_EXTENSIONS, MAX_UPLOAD_BYTES } from '../constants';
+import { describeRedactions } from '../lib/guardrails';
 import { useConfirm } from '../hooks/useConfirm';
 import { deleteDocument, listDocuments, searchDocuments, uploadDocument } from '../services/documentService';
 import type { DocumentSummary, SearchResult } from '../types/documents';
@@ -23,6 +24,7 @@ export function DocumentsPanel() {
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notes, setNotes] = useState<string[]>([]); // what the guardrails masked or flagged in the last upload
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -42,6 +44,7 @@ export function DocumentsPanel() {
   const uploadFiles = async (files: File[]) => {
     if (files.length === 0) return;
     setError(null);
+    setNotes([]);
     setUploading(true);
     // One at a time: embedding is CPU-heavy on the server.
     for (const file of files) {
@@ -53,6 +56,9 @@ export function DocumentsPanel() {
       try {
         const created = await uploadDocument(file);
         setDocs((prev) => [created, ...prev]);
+        const masked = describeRedactions(created.redacted ?? {});
+        if (masked) setNotes((n) => [...n, `${file.name}: masked ${masked} before indexing.`]);
+        setNotes((n) => [...n, ...(created.warnings ?? []).map((w) => `${file.name}: ${w}`)]);
         setResults(null);
       } catch (e) {
         setError(`${file.name}: ${messageOf(e)}`);
@@ -137,6 +143,14 @@ export function DocumentsPanel() {
             <p className="docs-error" role="alert">
               {error}
             </p>
+          )}
+
+          {notes.length > 0 && (
+            <div className="docs-note" role="status">
+              {notes.map((n) => (
+                <p key={n}>{n}</p>
+              ))}
+            </div>
           )}
 
           <ul className="docs-list">

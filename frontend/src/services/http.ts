@@ -20,6 +20,9 @@ export function isAbortError(e: unknown): boolean {
   return e instanceof DOMException && e.name === 'AbortError';
 }
 
+/** The server refused the content itself (a secret, or personal data in block mode), not the request. */
+export class GuardrailBlockedError extends Error {}
+
 /** fetch that turns every failure into an Error with a readable message. */
 export async function fetchOrThrow(path: string, init?: RequestInit): Promise<Response> {
   let response: Response;
@@ -36,7 +39,9 @@ export async function fetchOrThrow(path: string, init?: RequestInit): Promise<Re
   }
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null);
-    throw new Error(extractError(body, response.status));
+    const message = extractError(body, response.status);
+    if (response.headers.get('x-guardrail') === 'blocked') throw new GuardrailBlockedError(message);
+    throw new Error(message);
   }
   return response;
 }

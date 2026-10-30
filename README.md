@@ -28,10 +28,11 @@
 ## Highlights
 - **Streaming** replies over Server-Sent Events, with Stop (the partial answer is kept) and a safe, duplicate-free **Retry** and **Regenerate** built on idempotent message ids
 - **RAG with citations**: upload `.txt`, `.md` or `.pdf`; answers cite numbered passages, and a click opens the exact text and relevance score. Follow-up questions are rewritten into standalone search queries first
+- **Guardrails**: secrets and personal data are refused or masked on the way in (messages and uploads) and masked on the way out (model replies, even when split across stream chunks), plus rate limits, a request-size cap, security headers and log scrubbing
 - **Safe markdown**: syntax-highlighted code, tables and lists. Raw HTML, images and `javascript:` links are rendered inert (covered by tests)
 - **Saved conversations** (SQLite), searchable, grouped by date, restored after a refresh; **export** any chat to Markdown
 - **Polish**: light/dark themes without a flash, collapsible sidebar, keyboard shortcuts, toasts, accessible modal and menus, responsive down to phones
-- **Engineering**: Pydantic validation, mapped HTTP errors, secrets never logged or sent to the browser, 256 automated tests and CI
+- **Engineering**: Pydantic validation, mapped HTTP errors, secrets never logged or sent to the browser, 359 automated tests and CI
 
 ## Quick start (full stack)
 ```bash
@@ -89,6 +90,36 @@ chain = ChatPromptTemplate.from_messages([("system", "{system}"), MessagesPlaceh
 - **Tests** fake the OpenAI SDK at its lowest layer, so a real `ChatOpenAI` and the real chain run. Rewrite quality with a real model is **not measured**; the tests prove the plumbing and fallbacks. Pin exact dependency versions before deploying, since LangChain's API moves.
 
 The demo build is unaffected: its simulated assistant and client-side retrieval are not LangChain.
+
+## Guardrails and security
+Guardrails sit around the model, end to end. They are pattern-based checks, so they are a **safety net, not a guarantee** (see the limits below).
+
+![A message with an email and phone number, masked before sending, with a notice](docs/screenshots/guardrails-masked.png)
+
+| Where | What happens | Default |
+|---|---|---|
+| **Message in** | API keys, tokens, passwords and private keys are **refused** (HTTP 422, not saved, not sent). Emails, phones, card numbers (Luhn-checked), ID numbers and IBANs (checksummed) are **masked** as `[REDACTED:EMAIL]` before storing and before the model sees them | secrets `block`, personal data `redact` |
+| **Reply out** | Secrets and personal data in the model's reply are masked while it streams, including a secret split across two chunks. The stored reply is the masked one | always on |
+| **Upload in** | A file with a secret is refused; personal data is masked **before chunking and embedding**, so it is never indexed. A file that tries to instruct the AI ("ignore all previous instructions") gets a warning | same as messages |
+| **Abuse** | Per-client rate limits (429 + `Retry-After`), a 2.5 MB request cap (413, also for chunked bodies); `X-Forwarded-For` is trusted only with `TRUST_PROXY=true` | see `.env.example` |
+| **Responses** | `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, a `default-src 'none'` CSP and `Cache-Control: no-store` on API responses | always on |
+| **Logs** | Any secret or personal data that reaches a log line is masked first (defense in depth; message text is already never logged) | always on |
+
+What the user sees: a refused message returns to the box with an explanation (and no empty chat is left behind); a masked message shows its masked text plus a notice ("Masked 1 email address before sending"); an upload shows what was masked. The About dialog shows the active policy, and `GET /info` reports it.
+
+```bash
+GUARDRAILS=on  GUARDRAIL_SECRETS=block  GUARDRAIL_PII=redact   # the defaults; see backend/.env.example
+```
+
+**Limits, stated plainly**
+- Detection is regex plus checksums: it catches well-known key formats, cards, IBANs and the like, **not names, addresses, or an unfamiliar secret format**, and a determined user can evade it (spacing, encoding). It reduces accidents; it is not data-loss prevention.
+- A masked email can't be searched for or answered about. That is the intended trade.
+- Prompt-injection detection is a **warning only** (easy to evade); the real defenses are the escaped `<sources>` block and never giving the model tools or secrets.
+- Rate limits are in memory per process: with several workers each has its own count. Use a shared store (or your proxy's limits) when scaling out.
+- **There is still no authentication.** Guardrails do not replace it; see [Security notes](#security-notes) and `docs/DEPLOY.md`.
+- The demo build ports the input checks to the browser (parity-tested against the Python); it has no model, so there is no output guard.
+
+Details and step-through flows: `docs/AI-Chat-Guardrails-Guide.html`.
 
 ## Demo mode
 `VITE_DEMO=true` builds the frontend without a backend. A small in-browser stand-in (`frontend/src/demo/`) answers the same
@@ -311,13 +342,13 @@ source .venv/bin/activate
 pip install -r requirements-dev.txt
 pytest -q
 ```
-The 122 tests cover validation, error mapping, safe error messages, CORS, streaming (including mid-stream failure and cancellation), conversation storage, idempotent retry, cascade deletes, document upload (text, markdown, PDF, limits, filename safety), chunking, embedding failures, similarity ranking, RAG prompt building (relevance threshold, prompt-injection escaping, citations surviving retries and document deletion), and that invalid input never reaches the model. Database tests use a throwaway SQLite file per test. See `docs/testing.md` for the manual end-to-end checklist.
+The 187 tests cover validation, error mapping, safe error messages, CORS, streaming (including mid-stream failure and cancellation), conversation storage, idempotent retry, cascade deletes, document upload (text, markdown, PDF, limits, filename safety), chunking, embedding failures, similarity ranking, RAG prompt building (relevance threshold, prompt-injection escaping, citations surviving retries and document deletion), and that invalid input never reaches the model. Database tests use a throwaway SQLite file per test. See `docs/testing.md` for the manual end-to-end checklist.
 
 ### Frontend
 ```bash
 cd frontend
 npm install
-npm test            # 134 tests (Vitest + Testing Library)
+npm test            # 172 tests (Vitest + Testing Library)
 npm run lint && npx tsc -b && npm run build
 ```
 The tests cover the pieces that are easy to get subtly wrong: the SSE frame parser (frames split across network reads, newlines in text, error and sources frames), citation linking (never inside code, never for a source that doesn't exist), date grouping (including the API's timezone-less UTC timestamps), the composer (Enter vs Shift+Enter, IME composition, Stop), **markdown safety** (script, image, iframe and `javascript:` payloads rendered inert), citations (open, close, chips), the confirm dialog (focus, Escape, focus trap), the sidebar, the documents panel (validation, drag and drop, delete confirmation), the theme hook, and a regression test that streamed text updates the existing DOM instead of rebuilding it.
@@ -335,6 +366,10 @@ NODE_PATH=$(npm root -g) node frontend/e2e/smoke.cjs http://localhost:4173/ai-ch
 ## Configuration and limits
 | Setting | Where | Default |
 |---|---|---|
+| Guardrails | `GUARDRAILS`, `GUARDRAIL_SECRETS`, `GUARDRAIL_PII` in `.env` | `on`, `block`, `redact` |
+| Rate limits | `RATE_LIMIT_*_PER_MINUTE` in `.env` | 30 messages, 10 uploads, 30 searches, 30 chat, 60 new chats; `0` = off |
+| Request size cap | `MAX_REQUEST_BYTES` | 2,500,000 |
+| Trust `X-Forwarded-For` | `TRUST_PROXY` | `false` |
 | Allowed browser origins | `CORS_ORIGINS` in `.env` (comma-separated) | `http://localhost:5173`, `http://127.0.0.1:5173` |
 | Max characters per message | `backend/schemas.py`, `frontend/src/constants.ts` | 4000 |
 | Messages of context sent to the model | `backend/schemas.py` (`MAX_HISTORY_MESSAGES`) | 20 |
@@ -358,6 +393,7 @@ To use PostgreSQL later, set `DATABASE_URL` (for example `postgresql+psycopg://u
 - The server decides the model's context from its own database. A client can't inject fake turns by sending history.
 - Message text is never written to the logs.
 - **Rendering model output safely.** Replies are rendered as markdown with `react-markdown`, which builds React elements and never inserts raw HTML, so a reply containing `<script>`, `<img onerror=…>` or an `<iframe>` is shown as inert text. Images are dropped entirely (a remote image URL in model output would be a tracking pixel), `javascript:` links are neutralized, and external links open in a new tab with `rel="noopener noreferrer"`. All of this is covered by tests. A Content-Security-Policy header would add defense in depth when deploying.
+- **Guardrails** (see above) refuse or mask secrets and personal data in, and mask them out, so neither the database nor the model provider receives them in the default configuration. Masking happens on the server before storing: the original text is never kept.
 - **Prompt injection from documents.** Retrieved text is untrusted: a document can contain "ignore your instructions". Passages are placed in the *user* turn inside a `<sources>` block (never in the system prompt), any `<sources>` tags inside them are escaped so a document can't close the block early, and the system prompt tells the model to treat the block as reference text only. This reduces the risk but cannot eliminate it: a model may still be influenced by text it reads. Don't index documents you don't trust, and never give the model tools or secrets that a document could talk it into misusing.
 - Uploaded files are processed in memory and never written to disk, so there is no path-traversal or disk-filling risk from them. The filename is only a display label (directories are stripped). Size, type, document-count and chunk-count limits bound storage and compute. Note that the web framework may buffer a very large request body before the 2 MB check runs, so in production also cap request size at the reverse proxy.
 - **There is no authentication yet.** Anyone who can reach the API can list, read and delete every conversation. That is fine for local use only. Before deploying, add user accounts and an ownership check on every `/conversations` route.
@@ -379,4 +415,5 @@ See [`docs/DEPLOY.md`](docs/DEPLOY.md): the demo on GitHub Pages (safe to make p
 - `docs/AI-Chat-Flows-Guide.html`: step-by-step sequence diagrams of every end-to-end flow in the current app (startup, send, streaming, Stop, failures and Retry, database, conversations, UI states, security, testing, endpoints)
 - `docs/AI-Chat-RAG-Flows-Guide.html`: the same style of guide for documents and RAG (upload and indexing, search and thresholds, answering with citations), with live labs for chunking, scoring, and prompt building
 - `docs/AI-Chat-LangChain-Guide.html`: the LangChain integration (Phase 15): the chain, retriever and query rewriting as step-through flows, a live rewrite lab, how it is tested, and what was deliberately not adopted
-- `docs/AI-Chat-Interview-Guide.pdf`: all 56 interview questions (Phases 1 to 15), with answers and diagrams
+- `docs/AI-Chat-Guardrails-Guide.html`: the guardrails (Phase 16): what is checked where, step-through flows, a live detector lab, streaming redaction, abuse limits, and the limits of the approach
+- `docs/AI-Chat-Interview-Guide.pdf`: all 63 interview questions (Phases 1 to 16), with answers and diagrams

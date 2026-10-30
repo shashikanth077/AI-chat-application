@@ -18,11 +18,10 @@ def test_streams_deltas_then_done(client, fake_openai):
     r = client.post("/chat/stream", json=BODY)
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/event-stream")
-    assert events(r) == [
-        ("message", {"delta": "Hel"}),
-        ("message", {"delta": "lo\nthere"}),  # newline survives JSON encoding
-        ("done", {}),
-    ]
+    evs = events(r)
+    # The output guard holds back a short tail, so frame boundaries may differ from the provider's chunks.
+    assert "".join(d["delta"] for name, d in evs if name == "message") == "Hello\nthere"  # newline survives JSON
+    assert evs[-1] == ("done", {})
     assert fake_openai.chat.completions.create.call_args.kwargs["stream"] is True
     stream.close.assert_called_once()
 

@@ -6,6 +6,7 @@ import type { Source } from '../types/chat';
 import { composeReply, isCanned, tokenize } from './assistant';
 import { chunkText, dot, hashEmbed, MIN_SCORE } from './rag';
 import { SEED_DOCUMENTS } from './seed';
+import { BLOCKED_SECRET, checkInput, find, looksLikeInjection, redact, summarize } from './guardrails';
 import { load, save } from './store';
 import type { DemoDocument, DemoState } from './store';
 
@@ -24,6 +25,9 @@ const TITLE_MAX = 50;
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const fail = (status: number, detail: string) => json({ detail }, status);
+// A refusal of the content itself: the real backend marks it with this header so the UI can tell it apart.
+const blocked = (detail: string) =>
+  new Response(JSON.stringify({ detail }), { status: 422, headers: { 'Content-Type': 'application/json', 'X-Guardrail': 'blocked' } });
 const noContent = () => new Response(null, { status: 204 });
 const newId = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
@@ -85,6 +89,7 @@ export function demoInfo(): Info {
     embedding_backend: 'hashing',
     embedding_model: 'hashing:384',
     limits: LIMITS,
+    guardrails: { enabled: true, secrets: 'block', pii: 'redact' },
   };
 }
 
@@ -110,26 +115,28 @@ function streamReply(conversationId: string, body: { content?: unknown; client_m
     return fail(422, `Invalid request: message is too long (max ${LIMITS.max_message_chars} characters).`);
   }
   if (!clientId) return fail(422, 'Invalid request: client_message_id is required.');
+  const checked = checkInput(content);
+  if ('blocked' in checked) return blocked(checked.blocked); // refused before anything is stored
 
   // A retry of a stored message drops whatever followed it, then answers again.
   const at = conv.messages.findIndex((m) => m.client_id === clientId);
   if (at !== -1) {
     conv.messages.length = at + 1;
   } else {
-    if (conv.title === DEFAULT_TITLE) conv.title = makeTitle(content);
-    conv.messages.push({ id: s.nextMessageId++, role: 'user', content, client_id: clientId, sources: [] });
+    if (conv.title === DEFAULT_TITLE) conv.title = makeTitle(checked.text);
+    conv.messages.push({ id: s.nextMessageId++, role: 'user', content: checked.text, client_id: clientId, sources: [] });
   }
   conv.updated_at = now();
   save();
 
   let sources: Source[] | undefined;
-  if (body.use_documents && s.documents.length > 0 && !isCanned(content)) {
-    const asked = new Set(contentWords(content));
-    sources = search(s, content, MAX_PASSAGES)
+  if (body.use_documents && s.documents.length > 0 && !isCanned(checked.text)) {
+    const asked = new Set(contentWords(checked.text));
+    sources = search(s, checked.text, MAX_PASSAGES)
       .filter((p) => p.score >= MIN_SCORE && contentWords(p.text).some((w) => asked.has(w)))
       .map((p, i) => ({ n: i + 1, filename: p.filename, position: p.position, score: p.score, text: p.text }));
   }
-  const pieces = tokenize(composeReply(content, sources));
+  const pieces = tokenize(composeReply(checked.text, sources));
   const encoder = new TextEncoder();
   let text = '';
   let saved = false;
@@ -154,6 +161,9 @@ function streamReply(conversationId: string, body: { content?: unknown; client_m
       if (signal?.aborted) return onAbort();
       signal?.addEventListener('abort', onAbort, { once: true });
       try {
+        if (Object.keys(checked.redacted).length > 0) {
+          controller.enqueue(encoder.encode(sseFrame({ redacted: checked.redacted, content: checked.text }, 'guardrail')));
+        }
         if (sources) controller.enqueue(encoder.encode(sseFrame({ sources }, 'sources')));
         for (const piece of pieces) {
           await sleep(demoConfig.tokenDelayMs);
@@ -185,10 +195,16 @@ async function upload(form: FormData): Promise<Response> {
   if (s.documents.length >= LIMITS.max_documents) return fail(409, 'Document limit reached. Delete one first.');
   const text = await file.text();
   if (!text.trim()) return fail(422, 'The file has no readable text.');
-  const doc = makeDocument(name, text);
+  if (find(text, 'secret').length > 0) return blocked(BLOCKED_SECRET);
+  // Personal data is masked before chunking, so it is never indexed.
+  const findings = find(text);
+  const doc = makeDocument(name, redact(text, findings));
   s.documents.push(doc);
   save();
-  return json(summarizeDoc(doc), 201);
+  const warnings = looksLikeInjection(text)
+    ? ['This file contains text that tries to give instructions to an AI. It is treated as untrusted reference text, but review it before relying on answers from it.']
+    : [];
+  return json({ ...summarizeDoc(doc), redacted: summarize(findings), warnings }, 201);
 }
 
 /** Handles the same routes as backend/main.py. */

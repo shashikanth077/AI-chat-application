@@ -7,6 +7,7 @@ export interface Info {
   provider: string | null;
   embedding_backend: string;
   embedding_model: string;
+  guardrails: { enabled: boolean; secrets: string; pii: string };
   limits: {
     max_message_chars: number;
     history_messages: number;

@@ -80,3 +80,12 @@
 5. Why does a follow-up question retrieve poorly, and how does the rewrite step fix it? What guards does it need?
 6. What is a LangChain retriever, and why wrap the existing SQLite search instead of adopting a vector store?
 7. Which LangChain features did you decide not to use, and why? What should you do before deploying with it?
+
+## Phase 16
+1. Where do you put guardrails in a chat app with RAG, and what does each one do?
+2. Why refuse a secret but mask personal data?
+3. How do you redact sensitive text in a stream when a key can be split across two chunks?
+4. How do you keep false positives low when detecting cards, IDs and phone numbers?
+5. Why not trust X-Forwarded-For for rate limiting, and what are the limits of this rate limiter?
+6. How did you enforce a request-size limit including bodies sent without a Content-Length, and what went wrong?
+7. What do guardrails not protect against, and what would you add next?

@@ -189,3 +189,14 @@
   color: var(--text-2);
   overflow-wrap: anywhere;
 }
+
+.docs-note {
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--text-2);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+.docs-note p { margin: 0; }
+.docs-note p + p { margin-top: 4px; }

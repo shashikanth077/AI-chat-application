@@ -13,6 +13,13 @@ from services import llm  # noqa: E402
 from helpers import completion  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _fresh_rate_limits():
+    from guardrails.hardening import reset_rate_limits
+
+    reset_rate_limits()
+
+
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(main.app)

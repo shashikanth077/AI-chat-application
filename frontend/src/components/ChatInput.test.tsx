@@ -62,4 +62,14 @@ describe('ChatInput', () => {
     fireEvent.change(box, { target: { value: 'x'.repeat(3300) } });
     expect(screen.getByText('3300/4000')).toBeInTheDocument();
   });
+
+  it('puts a refused message back in the box, again each time `restore` changes', () => {
+    const box = () => screen.getByRole('textbox', { name: 'Message' });
+    const { rerender } = render(<ChatInput disabled={false} onSend={vi.fn()} onStop={vi.fn()} />);
+    rerender(<ChatInput disabled={false} onSend={vi.fn()} onStop={vi.fn()} restore={{ text: 'first', n: 1 }} />);
+    expect(box()).toHaveValue('first');
+    fireEvent.change(box(), { target: { value: '' } });
+    rerender(<ChatInput disabled={false} onSend={vi.fn()} onStop={vi.fn()} restore={{ text: 'first', n: 2 }} />);
+    expect(box()).toHaveValue('first');
+  });
 });

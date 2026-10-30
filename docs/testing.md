@@ -116,3 +116,9 @@ cd frontend && npm test
 - Automated: `tests/test_llm.py` (chain, prompt safety, config), `test_retriever.py`, `test_rewrite.py` (follow-ups, fallbacks, no extra call when not needed).
 - Manual, with a real key: ask about an uploaded document, then a vague follow-up such as "and how long do they nap?". The answer should still cite the right passage. Repeat with `RAG_REWRITE_QUERIES=false` to see the difference (the follow-up should find nothing).
 - Manual: stop a reply mid-stream, then check the partial text is kept; use a wrong `OPENAI_API_KEY` and confirm the UI shows "The server is not configured correctly." and no raw provider text.
+
+## Guardrail checks (Phase 16)
+- Automated: `backend/tests/test_guardrails.py` (detectors, streaming redaction at many chunk sizes, input and output, uploads, rate and size limits, headers, log scrubbing); `frontend/src/demo/guardrails.test.ts` (parity with the Python detectors) and the demo API tests.
+- Manual, full stack: send a message containing a fake key such as `sk-proj-abcdefghijklmnopqrstuvwx1234`. It should be refused, vanish from the thread, and come back in the box. Send an email address: the bubble should show `[REDACTED:EMAIL]`, a notice should appear, and a refresh should still show the masked text.
+- Manual: upload a `.txt` containing a key (refused) and one containing an email (accepted, with a "masked 1 email address" note). Ask about it and confirm the answer never shows the address.
+- Manual: send 31 messages in a minute; the 31st should say "Too many requests" with a retry delay.
