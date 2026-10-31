@@ -62,3 +62,17 @@ describe('handleFrame', () => {
     expect(handlers.onDelta).not.toHaveBeenCalled();
   });
 });
+
+describe('handleFrame: guardrail', () => {
+  it('reports what was masked and what the message now says', () => {
+    const { handlers, state } = setup();
+    const onGuardrail = vi.fn();
+    handleFrame('event: guardrail\ndata: {"redacted":{"EMAIL":1},"content":"mail [REDACTED:EMAIL]"}', { ...handlers, onGuardrail }, state);
+    expect(onGuardrail).toHaveBeenCalledExactlyOnceWith({ EMAIL: 1 }, 'mail [REDACTED:EMAIL]');
+    expect(handlers.onDelta).not.toHaveBeenCalled();
+  });
+  it('is ignored when nobody listens', () => {
+    const { handlers, state } = setup();
+    expect(() => handleFrame('event: guardrail\ndata: {"redacted":{"EMAIL":1},"content":"x"}', handlers, state)).not.toThrow();
+  });
+});

@@ -9,7 +9,7 @@ from models import MessageSource
 from schemas import ChatMessage, SearchResult
 from services import embeddings, rag
 from services.embeddings import EmbeddingError
-from services.openai_service import SYSTEM_PROMPT
+from services.llm import SYSTEM_PROMPT
 
 REQ = httpx.Request("POST", "http://test")
 

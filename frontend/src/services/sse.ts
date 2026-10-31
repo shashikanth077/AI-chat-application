@@ -4,6 +4,8 @@ export interface StreamHandlers {
   onDelta: (text: string) => void;
   // Sent once, before the first token, when the user's documents were searched.
   onSources: (sources: Source[]) => void;
+  // Sent once, first, when the server masked personal data in the message. `content` is what it now says.
+  onGuardrail?: (redacted: Record<string, number>, content: string) => void;
 }
 
 export interface StreamState {
@@ -36,9 +38,16 @@ export function handleFrame(frame: string, handlers: StreamHandlers, state: Stre
   }
   if (!data) return;
 
-  const payload = JSON.parse(data) as { delta?: string; detail?: string; sources?: Source[] };
+  const payload = JSON.parse(data) as {
+    delta?: string;
+    detail?: string;
+    sources?: Source[];
+    redacted?: Record<string, number>;
+    content?: string;
+  };
   if (event === 'error') throw new Error(payload.detail ?? 'The response failed.');
   if (event === 'done') state.finished = true;
   else if (event === 'sources') handlers.onSources(payload.sources ?? []);
+  else if (event === 'guardrail') handlers.onGuardrail?.(payload.redacted ?? {}, payload.content ?? '');
   else if (payload.delta) handlers.onDelta(payload.delta);
 }

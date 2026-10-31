@@ -6,7 +6,7 @@ from helpers import FakeStream, chunk, events
 from sqlalchemy import func, select
 
 from models import Message
-from services.openai_service import ChatServiceError
+from services.llm import ChatServiceError
 from streaming import sse_events
 
 REQ = httpx.Request("POST", "http://test")
@@ -70,11 +70,9 @@ def test_send_streams_and_persists_both_messages_and_sets_title(client, db, fake
     cid = new_conversation(client)
     provider_says(fake_openai, "Hel", "lo")
     r = send(client, cid, "What is   FastAPI?\nExplain.")
-    assert events(r) == [
-        ("message", {"delta": "Hel"}),
-        ("message", {"delta": "lo"}),
-        ("done", {}),
-    ]
+    evs = events(r)
+    assert "".join(d["delta"] for name, d in evs if name == "message") == "Hello"
+    assert evs[-1] == ("done", {})
     assert stored(client, cid) == [("user", "What is   FastAPI?\nExplain."), ("assistant", "Hello")]
     assert client.get(f"/conversations/{cid}").json()["title"] == "What is FastAPI? Explain."
 
@@ -200,13 +198,16 @@ def test_empty_model_reply_saves_no_assistant_message(client, db, fake_openai):
     assert stored(client, cid) == [("user", "hi")]
 
 
-def test_closing_the_stream_saves_the_partial_text():
+def test_closing_the_stream_saves_the_partial_text(fake_openai):
     """Stop / closed tab: the generator is closed after the first token."""
+    from schemas import ChatMessage
+    from services.llm import open_reply_stream
+
     saved = []
     stream = FakeStream([chunk("Hel"), chunk("lo")])
-    from services.openai_service import _iter_deltas
+    fake_openai.chat.completions.create.return_value = stream
 
-    frames = sse_events(_iter_deltas(stream), saved.append)
+    frames = sse_events(open_reply_stream([ChatMessage(role="user", content="hi")]), saved.append)
     next(frames)  # first token delivered
     frames.close()  # what Starlette does when the client disconnects
     assert saved == ["Hel"]

@@ -71,3 +71,21 @@
 4. What does an accessible custom confirm dialog need, and why replace `window.confirm`?
 5. What did you test at each level of the frontend (unit, component, end-to-end), and what does each level catch that the others miss?
 6. The API returns timestamps without a timezone. What goes wrong in the browser, and how is it handled?
+
+## Phase 15
+1. What does LangChain add to this app, and what did you consciously keep hand-written?
+2. Explain the chain `prompt | model | parser`. Why is the system text passed as a variable and the history as message objects?
+3. An error before the first token should be an HTTP error, and after it an in-stream event. How did you keep that behaviour with LangChain, and what changed?
+4. How did you test the migration without a network, and at which layer did you place the fake?
+5. Why does a follow-up question retrieve poorly, and how does the rewrite step fix it? What guards does it need?
+6. What is a LangChain retriever, and why wrap the existing SQLite search instead of adopting a vector store?
+7. Which LangChain features did you decide not to use, and why? What should you do before deploying with it?
+
+## Phase 16
+1. Where do you put guardrails in a chat app with RAG, and what does each one do?
+2. Why refuse a secret but mask personal data?
+3. How do you redact sensitive text in a stream when a key can be split across two chunks?
+4. How do you keep false positives low when detecting cards, IDs and phone numbers?
+5. Why not trust X-Forwarded-For for rate limiting, and what are the limits of this rate limiter?
+6. How did you enforce a request-size limit including bodies sent without a Content-Length, and what went wrong?
+7. What do guardrails not protect against, and what would you add next?

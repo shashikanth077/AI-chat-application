@@ -7,6 +7,7 @@ import { AboutDialog } from './AboutDialog';
 const info: Info = {
   app: 'AI Chat', version: '1.0.0', demo: false, model: 'llama-3.3-70b', provider: 'api.groq.com',
   embedding_backend: 'fastembed', embedding_model: 'BAAI/bge-small-en-v1.5',
+  guardrails: { enabled: true, secrets: 'block', pii: 'redact' },
   limits: { max_message_chars: 4000, history_messages: 20, max_upload_bytes: 2_000_000, max_documents: 50 },
 };
 
@@ -55,5 +56,15 @@ describe('AboutDialog', () => {
     last.focus();
     await userEvent.tab();
     expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+  });
+
+  it('says what the guardrails do on a real deployment', () => {
+    render(<AboutDialog info={info} demo={false} onClose={vi.fn()} />);
+    expect(screen.getByText('secrets refused, personal data masked')).toBeInTheDocument();
+  });
+
+  it('reports guardrails as off when they are', () => {
+    render(<AboutDialog info={{ ...info, guardrails: { enabled: false, secrets: 'block', pii: 'redact' } }} demo={false} onClose={vi.fn()} />);
+    expect(screen.getByText('off')).toBeInTheDocument();
   });
 });

@@ -11,6 +11,8 @@ import {
 import { isAbortError } from './services/http';
 import { AboutDialog } from './components/AboutDialog';
 import { ChatInput } from './components/ChatInput';
+import { describeRedactions } from './lib/guardrails';
+import { GuardrailBlockedError } from './services/http';
 import { Header } from './components/Header';
 import { MessageList } from './components/MessageList';
 import { Sidebar } from './components/Sidebar';
@@ -61,6 +63,8 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false); // mobile drawer
   const [collapsed, setCollapsed] = useState(() => readStored(COLLAPSED_KEY) === 'true'); // desktop
   const [aboutOpen, setAboutOpen] = useState(false);
+  // A refused message goes back into the box so the user can edit it.
+  const [restore, setRestore] = useState<{ text: string; n: number } | undefined>();
   const [useDocuments, setUseDocuments] = useState(() => readStored(DOCS_KEY) !== 'false'); // on unless turned off
   const { theme, toggle: toggleTheme } = useTheme();
   const { confirm, dialog } = useConfirm();
@@ -143,7 +147,8 @@ function App() {
   }, []);
 
   // Shared by send, retry and regenerate: stream a reply into the list.
-  const requestReply = async (start: StartStream) => {
+  // `userId` is the user message this reply answers; `onBlocked` runs if the server refuses that message's content.
+  const requestReply = async (start: StartStream, userId: string, onBlocked?: () => void | Promise<void>) => {
     setError(null);
     setLoading(true);
     const controller = new AbortController();
@@ -158,6 +163,11 @@ function App() {
         {
           onSources: (found) => {
             sources = found;
+          },
+          onGuardrail: (redacted, content) => {
+            // Show what was actually saved and sent, not what was typed.
+            setMessages((prev) => prev.map((m) => (m.id === userId ? { ...m, content } : m)));
+            toast.show(`Masked ${describeRedactions(redacted)} before sending.`, 'info');
           },
           onDelta: (delta) => {
             if (!started) {
@@ -181,7 +191,12 @@ function App() {
       );
     } catch (e) {
       // Stop is a user choice, not a failure. Any partial text is kept.
-      if (!isAbortError(e)) setError(messageOf(e));
+      if (e instanceof GuardrailBlockedError && onBlocked) {
+        await onBlocked(); // finish cleaning up before the list is refreshed below
+        toast.show(e.message, 'error');
+      } else if (!isAbortError(e)) {
+        setError(messageOf(e));
+      }
     } finally {
       setLoading(false);
       abortRef.current = null;
@@ -193,6 +208,7 @@ function App() {
     setError(null);
     setLoading(true); // also blocks double-sends while the conversation is created
     let id = activeId;
+    const createdHere = !id;
     if (!id) {
       try {
         // Created on the first message, so "New chat" never leaves empty rows behind.
@@ -212,8 +228,21 @@ function App() {
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: text };
     setMessages((prev) => [...prev, userMsg]);
     const conversationId = id;
-    void requestReply((handlers, signal) =>
-      streamMessage(conversationId, userMsg.id, text, useDocuments, handlers, signal),
+    void requestReply(
+      (handlers, signal) => streamMessage(conversationId, userMsg.id, text, useDocuments, handlers, signal),
+      userMsg.id,
+      async () => {
+        // The message was refused (it held a secret): take it off the screen and back into the box.
+        setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+        setRestore((r) => ({ text, n: (r?.n ?? 0) + 1 }));
+        if (createdHere) {
+          // Don't leave an empty "New chat" behind for a message that was never accepted.
+          await deleteConversation(conversationId).catch(() => {});
+          setConversations((prev) => prev.filter((c) => c.id !== conversationId));
+          setActiveId(null);
+          writeStored(ACTIVE_KEY, null);
+        }
+      },
     );
   };
 
@@ -226,8 +255,9 @@ function App() {
   const resendLast = () => {
     if (!activeId || !lastUser) return;
     setMessages(messages.slice(0, lastUserIndex + 1)); // drop the old answer from the screen
-    void requestReply((handlers, signal) =>
-      streamMessage(activeId, lastUser.id, lastUser.content, useDocuments, handlers, signal),
+    void requestReply(
+      (handlers, signal) => streamMessage(activeId, lastUser.id, lastUser.content, useDocuments, handlers, signal),
+      lastUser.id,
     );
   };
 
@@ -331,7 +361,7 @@ function App() {
           onRegenerate={canRegenerate ? resendLast : undefined}
           onSuggest={(prompt) => void handleSend(prompt)}
         />
-        <ChatInput disabled={loading} onSend={(t) => void handleSend(t)} onStop={handleStop} />
+        <ChatInput disabled={loading} onSend={(t) => void handleSend(t)} onStop={handleStop} restore={restore} />
       </main>
       {dialog}
       {aboutOpen && <AboutDialog info={info} demo={DEMO} onClose={() => setAboutOpen(false)} />}

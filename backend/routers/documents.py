@@ -6,6 +6,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from database import get_db
+from guardrails.checks import GuardrailBlocked, check_document
+from guardrails.hardening import rate_limit
 from models import Chunk, Document
 from schemas import DocumentSummary, SearchRequest, SearchResult
 from services import retrieval
@@ -26,7 +28,7 @@ def list_documents(db: Session = Depends(get_db)) -> list[Document]:
     return list(db.scalars(select(Document).order_by(Document.created_at.desc())))
 
 
-@router.post("", response_model=DocumentSummary, status_code=201)
+@router.post("", response_model=DocumentSummary, status_code=201, dependencies=[Depends(rate_limit("uploads", "RATE_LIMIT_UPLOADS_PER_MINUTE", 10))])
 def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db)) -> Document:
     filename = clean_filename(file.filename)
     if extension_of(filename) not in ALLOWED_EXTENSIONS:
@@ -43,11 +45,16 @@ def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db))
 
     try:
         text = extract_text(filename, data)
-        chunks = chunk_text(text)
+        # Secrets are refused; personal data is masked BEFORE chunking, embedding and storing,
+        # so neither the database nor the model ever sees it.
+        checked = check_document(text)
+        chunks = chunk_text(checked.text)
         if len(chunks) > MAX_CHUNKS_PER_DOCUMENT:
             raise DocumentError(422, f"The document is too long (over {MAX_CHUNKS_PER_DOCUMENT} chunks). Split it.")
         embedder = get_embedder()
         vectors = embedder.embed_documents(chunks)
+    except GuardrailBlocked as exc:
+        raise HTTPException(status_code=422, detail=exc.message, headers={"X-Guardrail": "blocked"})
     except DocumentError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message)
     except EmbeddingError as exc:
@@ -66,6 +73,9 @@ def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db))
     ]
     db.add(document)
     db.commit()
+    # Not stored: only the response says what was masked or flagged.
+    document.redacted = checked.redacted  # type: ignore[attr-defined]
+    document.warnings = checked.warnings  # type: ignore[attr-defined]
     return document
 
 
@@ -79,7 +89,7 @@ def delete_document(document_id: str, db: Session = Depends(get_db)) -> Response
     return Response(status_code=204)
 
 
-@router.post("/search", response_model=list[SearchResult])
+@router.post("/search", dependencies=[Depends(rate_limit("search", "RATE_LIMIT_SEARCH_PER_MINUTE", 30))], response_model=list[SearchResult])
 def search_documents(body: SearchRequest, db: Session = Depends(get_db)) -> list[SearchResult]:
     try:
         return retrieval.search(db, body.query, body.top_k)

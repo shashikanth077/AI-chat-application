@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Chat App: LangChain</title>
+<style>
+  :root {
+    --bg: #f5f6fa; --surface: #ffffff; --text: #1d2330; --muted: #5b6474;
+    --line: #e2e6ee; --accent: #2563eb; --accent-soft: #e8efff;
+    --c-user: #64748b; --c-ui: #0e8fb0; --c-api: #7c3aed; --c-db: #15803d; --c-ai: #b45309; --c-env: #be185d;
+    --danger: #b91c1c; --danger-soft: #fee2e2; --ok: #15803d; --ok-soft: #dcfce7; --warn-soft: #fef3c7;
+    --code-bg: #0b1020; --code-fg: #e6e9f0; --on-accent: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1420; --surface: #171e2d; --text: #e6e9f0; --muted: #9aa4b5;
+      --line: #2a3347; --accent: #6ea8ff; --accent-soft: #1d2a47;
+      --c-user: #94a3b8; --c-ui: #38c8e6; --c-api: #a78bfa; --c-db: #4ade80; --c-ai: #fbbf24; --c-env: #f472b6;
+      --danger: #f87171; --danger-soft: #3b1d22; --ok: #4ade80; --ok-soft: #14301f; --warn-soft: #3a2f12; --on-accent: #0b1020;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1420; --surface: #171e2d; --text: #e6e9f0; --muted: #9aa4b5;
+    --line: #2a3347; --accent: #6ea8ff; --accent-soft: #1d2a47;
+    --c-user: #94a3b8; --c-ui: #38c8e6; --c-api: #a78bfa; --c-db: #4ade80; --c-ai: #fbbf24; --c-env: #f472b6;
+    --danger: #f87171; --danger-soft: #3b1d22; --ok: #4ade80; --ok-soft: #14301f; --warn-soft: #3a2f12; --on-accent: #0b1020;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  header.top { position: sticky; top: 0; z-index: 30; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .top-inner { max-width: 1200px; margin: 0 auto; padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .top h1 { font-size: 1rem; margin: 0; white-space: nowrap; }
+  nav.tabs { display: flex; gap: 6px; overflow-x: auto; flex: 1; min-width: 0; padding-bottom: 2px; }
+  nav.tabs button { white-space: nowrap; }
+  button { font: inherit; font-size: 0.9rem; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--text); padding: 5px 11px; border-radius: 8px; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .step:focus { outline: none; }
+  .step:focus-visible .hit { stroke: var(--accent); stroke-width: 2px; }
+  main { max-width: 1200px; margin: 0 auto; padding: 22px 16px 90px; }
+  section.panel { display: none; }
+  section.panel.active { display: block; }
+  h2 { font-size: 1.5rem; margin: 0 0 4px; }
+  h3 { margin: 0 0 8px; font-size: 1.05rem; }
+  .lead { color: var(--muted); margin: 0 0 18px; max-width: 80ch; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; min-width: 0; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .86em; }
+  code { background: var(--accent-soft); padding: 1px 6px; border-radius: 5px; overflow-wrap: anywhere; }
+  pre { background: var(--code-bg); color: var(--code-fg); padding: 12px; border-radius: 10px; overflow-x: auto; font-size: .82rem; line-height: 1.5; margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .pill { display: inline-block; font-size: .72rem; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); margin-right: 6px; }
+  .note { border-left: 3px solid var(--c-ai); padding: 8px 12px; background: var(--warn-soft); border-radius: 0 8px 8px 0; margin: 10px 0; font-size: .93rem; }
+  .note.bad { border-color: var(--danger); background: var(--danger-soft); }
+  .note.good { border-color: var(--ok); background: var(--ok-soft); }
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+  svg text { fill: var(--text); font-family: system-ui, sans-serif; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .85rem; color: var(--muted); margin: 6px 0 14px; }
+  .legend span::before { content: ''; display: inline-block; width: 22px; height: 0; border-top: 3px solid; vertical-align: middle; margin-right: 6px; }
+  .legend .l-n::before { border-color: var(--accent); } .legend .l-d::before { border-color: var(--c-db); }
+  .legend .l-e::before { border-color: var(--danger); } .legend .l-r::before { border-color: var(--muted); border-top-style: dashed; }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+
+  /* ---------- Flow player ---------- */
+  .flowlayout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(290px, 1fr); gap: 16px; align-items: start; }
+  .flowdiagram { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+  .flowdiagram svg { display: block; min-width: 680px; width: 100%; height: auto; }
+  .flowdetail { position: sticky; top: 64px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; z-index: 5; }
+  .controls { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .stepcount { color: var(--muted); font-size: .8rem; margin-left: auto; align-self: center; }
+  .flowdetail h4 { margin: 4px 0 6px; font-size: 1rem; }
+  .flowdetail p { margin: 0 0 8px; font-size: .93rem; }
+  .coderef { display: block; margin: 6px 0; }
+  .lane-head rect { fill: var(--surface); stroke-width: 2; }
+  .lane-head text.t1 { font-size: 13px; font-weight: 700; } .lane-head text.t2 { font-size: 10.5px; fill: var(--muted); }
+  .lifeline { stroke-dasharray: 4 5; stroke-width: 1.5; opacity: .5; }
+  .step { cursor: pointer; transition: opacity .2s; }
+  .step.future { opacity: .22; }
+  .step .hit { fill: transparent; }
+  .step.current .hit { fill: var(--accent-soft); }
+  .step .arrow { stroke: var(--accent); stroke-width: 2.2; fill: none; }
+  .step.k-db .arrow { stroke: var(--c-db); } .step.k-err .arrow { stroke: var(--danger); }
+  .step.ret .arrow { stroke-dasharray: 6 4; }
+  .step.current .arrow { stroke-width: 3.4; }
+  .step .badge { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+  .step.k-db .badge { stroke: var(--c-db); } .step.k-err .badge { stroke: var(--danger); }
+  .step.current .badge { fill: var(--accent); } .step.k-db.current .badge { fill: var(--c-db); } .step.k-err.current .badge { fill: var(--danger); }
+  .step .bn { font-size: 11px; font-weight: 700; text-anchor: middle; }
+  .step.current .bn { fill: var(--on-accent); }
+  .step .lbl { font-size: 12px; paint-order: stroke; stroke: var(--surface); stroke-width: 5px; stroke-linejoin: round; }
+  .step.current .lbl { font-weight: 700; }
+  .mk-n { fill: var(--accent); } .mk-d { fill: var(--c-db); } .mk-e { fill: var(--danger); }
+
+  /* ---------- Simulators ---------- */
+  .sim-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  input[type=text], select { font: inherit; font-size: .92rem; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); min-width: 0; }
+  input[type=text] { flex: 1 1 200px; }
+  .dim { opacity: .4; }
+  .chip { cursor: pointer; border-radius: 999px; padding: 4px 12px; font-size: .82rem; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+  .chip.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: .9rem; }
+  .kv b { color: var(--muted); font-weight: 600; }
+  .ev-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .st rect { fill: var(--surface); stroke: var(--muted); stroke-width: 2; } .st text { font-size: 13px; font-weight: 600; text-anchor: middle; }
+  .st.on rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 3.5; }
+  .edge { stroke: var(--muted); stroke-width: 1.6; fill: none; } .edge.on { stroke: var(--accent); stroke-width: 3.5; }
+  .elbl { font-size: 10.5px; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; fill: var(--muted); text-anchor: middle; }
+  .elbl.on { fill: var(--accent); font-weight: 700; }
+  .layer.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  .layer.missing { border-color: var(--danger); color: var(--danger); }
+  .layer.missing.on { background: var(--danger); color: var(--on-accent); }
+
+  .toggle-theme { margin-left: auto; }
+  footer { color: var(--muted); font-size: .85rem; text-align: center; margin-top: 36px; }
+
+  @media (max-width: 700px) {
+    .top-inner { gap: 6px 10px; }
+    .top h1 { font-size: .95rem; }
+    nav.tabs { order: 3; flex: 1 1 100%; }
+    .toggle-theme { margin-left: auto; }
+  }
+  @media (max-width: 880px) {
+    .flowlayout { grid-template-columns: 1fr; }
+    .flowdetail { position: sticky; top: auto; bottom: 0; max-height: 44vh; overflow: auto; box-shadow: 0 -6px 18px rgba(0,0,0,.18); }
+    h2 { font-size: 1.25rem; } main { padding: 16px 12px 90px; }
+  }
+
+  textarea { width: 100%; font: inherit; font-size: .9rem; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); resize: vertical; }
+  input[type=range] { vertical-align: middle; width: 150px; accent-color: var(--accent); }
+  .chunk { border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; overflow: hidden; }
+  .chunk-h { background: var(--accent-soft); font-size: .78rem; color: var(--muted); padding: 3px 10px; }
+  .chunk-t { padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .9rem; }
+  mark.ov { background: var(--warn-soft); color: inherit; border-bottom: 2px solid var(--c-ai); }
+  mark.esc { background: var(--danger-soft); color: var(--danger); border-radius: 3px; }
+  mark.real { background: var(--ok-soft); color: var(--ok); border-radius: 3px; }
+  .sres { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 8px 0; }
+  .sres.sent { border-color: var(--ok); } .sres.dropped { opacity: .6; } .sres.cap { border-color: var(--c-ai); }
+  .hit-top { display: flex; justify-content: space-between; gap: 8px; font-size: .8rem; }
+  .hit-score { font-weight: 700; font-variant-numeric: tabular-nums; } .hit-state { color: var(--muted); }
+  .sres.sent .hit-state { color: var(--ok); font-weight: 600; }
+  .bar-track { position: relative; height: 8px; background: var(--line); border-radius: 999px; margin: 6px 0; }
+  .bar-fill { height: 100%; background: var(--accent); border-radius: 999px; }
+  .sres.sent .bar-fill { background: var(--ok); }
+  .bar-th { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--danger); }
+  .hit-text { font-size: .86rem; overflow-wrap: anywhere; }
+  .lead code { font-size: .82em; }
+  pre code { background: none; color: inherit; padding: 0; font-size: .85rem; }
+  .card p, .card li { overflow-wrap: anywhere; }  /* long identifiers such as test names must wrap, not widen the page */
+  ul, ol { margin: 6px 0; padding-left: 20px; }
+  @media (max-width: 700px) { input[type=range] { width: 110px; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <h1>AI Chat App: LangChain</h1>
+    <nav class="tabs" id="tabs" aria-label="Sections"></nav>
+    <button class="toggle-theme" id="theme" aria-label="Toggle dark mode">Dark mode</button>
+  </div>
+</header>
+
+<main>
+
+<!-- ================= OVERVIEW ================= -->
+<section class="panel" id="overview" data-title="Overview">
+  <h2>LangChain in this app: what moved, and what deliberately didn't</h2>
+  <p class="lead">Phase 15 puts the model call, the document search and a new follow-up-question step on LangChain. The rule was: <b>change the plumbing, keep the contract</b>. The stream frames, <code>ChatServiceError</code>, the SQLite tables, citations and idempotent retry behave exactly as before, so the React app needed no changes.</p>
+
+  <div class="card">
+    <h3>Before and after</h3>
+    <div class="tablewrap"><table>
+      <tr><th></th><th>Before (hand-written)</th><th>After (LangChain)</th></tr>
+      <tr><td>Calling the model</td><td><code>openai.OpenAI().chat.completions.create(...)</code> with a hand-built message list</td><td><code>ChatPromptTemplate | ChatOpenAI | StrOutputParser</code> (one LCEL chain), in <code>services/llm.py</code></td></tr>
+      <tr><td>Streaming</td><td>Iterate SDK chunks, pick <code>delta.content</code></td><td><code>chain.stream(...)</code> yields text pieces; empty ones are skipped</td></tr>
+      <tr><td>Errors</td><td><code>_translate(OpenAIError)</code></td><td>The same mapping: <code>ChatOpenAI</code> lets the SDK's exceptions through unchanged</td></tr>
+      <tr><td>Searching documents</td><td><code>retrieval.search(db, query, k)</code> called directly</td><td>The same function behind a <code>SqliteRetriever(BaseRetriever)</code>: <code>.invoke(query)</code> returns <code>Document</code>s</td></tr>
+      <tr><td>Follow-up questions</td><td>The raw text was embedded ("and how long do they nap?" matched nothing)</td><td>A small chain rewrites it into a standalone query first (<code>services/rewrite.py</code>)</td></tr>
+      <tr><td>Tests</td><td>A mock of the SDK client</td><td>Real <code>ChatOpenAI</code> and real chain, with the SDK's HTTP-calling resource faked underneath</td></tr>
+    </table></div>
+  </div>
+
+  <div class="card">
+    <h3>The send flow now</h3>
+    <div class="tablewrap">
+    <svg viewBox="0 0 940 190" width="100%" style="min-width:780px" role="img" aria-label="Send flow with LangChain pieces">
+      <defs><marker id="ov" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8a94a6"/></marker></defs>
+      <g font-size="13">
+        <rect x="10" y="30" width="130" height="62" rx="10" fill="none" stroke="var(--c-ui)" stroke-width="2"/><text x="75" y="58" text-anchor="middle" font-weight="700">Question</text><text x="75" y="76" text-anchor="middle" fill="var(--muted)">+ history</text>
+        <rect x="175" y="30" width="170" height="62" rx="10" fill="none" stroke="var(--c-env)" stroke-width="2" stroke-dasharray="6 4"/><text x="260" y="58" text-anchor="middle" font-weight="700">Rewrite (NEW)</text><text x="260" y="76" text-anchor="middle" fill="var(--muted)">follow-ups only</text>
+        <rect x="380" y="30" width="170" height="62" rx="10" fill="none" stroke="var(--c-db)" stroke-width="2"/><text x="465" y="58" text-anchor="middle" font-weight="700">SqliteRetriever</text><text x="465" y="76" text-anchor="middle" fill="var(--muted)">top 4 over threshold</text>
+        <rect x="585" y="30" width="150" height="62" rx="10" fill="none" stroke="var(--c-api)" stroke-width="2"/><text x="660" y="58" text-anchor="middle" font-weight="700">rag.build_prompt</text><text x="660" y="76" text-anchor="middle" fill="var(--muted)">unchanged</text>
+        <rect x="770" y="30" width="160" height="62" rx="10" fill="none" stroke="var(--c-ai)" stroke-width="2"/><text x="850" y="58" text-anchor="middle" font-weight="700">LCEL chain</text><text x="850" y="76" text-anchor="middle" fill="var(--muted)">prompt | model | parser</text>
+        <line x1="140" y1="61" x2="173" y2="61" stroke="#8a94a6" stroke-width="2" marker-end="url(#ov)"/><line x1="345" y1="61" x2="378" y2="61" stroke="#8a94a6" stroke-width="2" marker-end="url(#ov)"/><line x1="550" y1="61" x2="583" y2="61" stroke="#8a94a6" stroke-width="2" marker-end="url(#ov)"/><line x1="735" y1="61" x2="768" y2="61" stroke="#8a94a6" stroke-width="2" marker-end="url(#ov)"/>
+        <text x="10" y="135" font-weight="700" fill="var(--c-api)">Unchanged around it</text>
+        <text x="10" y="157" fill="var(--muted)">SSE frames (sources, text, done, error) · ChatServiceError · SQLite tables · citation snapshots · idempotent retry · the React app · demo mode</text>
+      </g>
+    </svg>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Where each piece lives</h3>
+    <div class="tablewrap"><table>
+      <tr><th>Piece</th><th>File</th><th>Role</th></tr>
+      <tr><td>Chat chain</td><td><code>services/llm.py</code></td><td>Builds <code>ChatOpenAI</code> from env, the prompt, streaming, error translation (was <code>openai_service.py</code>)</td></tr>
+      <tr><td>Retriever</td><td><code>services/retriever.py</code></td><td><code>SqliteRetriever</code> and <code>to_search_result</code></td></tr>
+      <tr><td>Query rewrite</td><td><code>services/rewrite.py</code></td><td><code>standalone_question(history)</code></td></tr>
+      <tr><td>RAG glue</td><td><code>services/rag.py</code></td><td><code>retrieve(db, history)</code> now rewrites, then retrieves; <code>build_prompt</code> unchanged</td></tr>
+    </table></div>
+  </div>
+  <div class="legend"><span class="l-n">Normal step</span><span class="l-d">Database read or write</span><span class="l-e">Failure path</span><span class="l-r">Response / return</span></div>
+</section>
+
+<!-- ================= CHAIN ================= -->
+<section class="panel" id="chain" data-title="The chain">
+  <h2>The LCEL chain: from your message to streamed text</h2>
+  <p class="lead">LCEL ("LangChain Expression Language") joins steps with <code>|</code>. Each step takes the previous step's output. Here: a prompt that arranges the messages, a chat model that calls the provider, and a parser that turns model chunks into plain strings.</p>
+  <div class="card">
+    <h3>The whole thing</h3>
+<pre><code>_PROMPT = ChatPromptTemplate.from_messages([("system", "{system}"), MessagesPlaceholder("history")])
+
+chain = _PROMPT | get_chat_model() | StrOutputParser()
+chain.stream({"system": system_text, "history": [HumanMessage(...), AIMessage(...)]})</code></pre>
+    <ul>
+      <li><b>The system text is a variable, not part of the template</b>, and the history is already message objects. LangChain never parses braces in what the user typed (a test sends <code>{system} {history}</code> and checks it arrives verbatim).</li>
+      <li><b><code>ChatOpenAI</code> with <code>base_url</code></b> works with any OpenAI-compatible provider, so Groq keeps working: <code>OPENAI_BASE_URL=https://api.groq.com/openai/v1</code>.</li>
+      <li><b>Same limits as before:</b> 30 s timeout, 2 retries, <code>max_tokens=800</code> (sent to the provider as <code>max_completion_tokens</code>).</li>
+    </ul>
+  </div>
+  <div class="pills" id="pills-chain"></div>
+  <div id="flow-chain"></div>
+</section>
+
+<!-- ================= RETRIEVER ================= -->
+<section class="panel" id="retriever" data-title="Retriever">
+  <h2>The document store as a LangChain retriever</h2>
+  <p class="lead">A retriever is anything with <code>.invoke(query) -> list[Document]</code>. <code>SqliteRetriever</code> wraps the existing search; no storage or scoring code changed. The payoff is a standard interface: a vector-store retriever, a hybrid one, or a re-ranking wrapper could replace it without touching callers.</p>
+  <div class="pills" id="pills-retriever"></div>
+  <div id="flow-retriever"></div>
+  <div class="card" style="margin-top:16px">
+    <h3>The mapping</h3>
+    <div class="tablewrap"><table>
+      <tr><th>SearchResult field</th><th>Document</th></tr>
+      <tr><td><code>text</code></td><td><code>page_content</code></td></tr>
+      <tr><td><code>document_id</code>, <code>filename</code>, <code>position</code>, <code>score</code></td><td><code>metadata</code> (same keys)</td></tr>
+    </table></div>
+    <p><code>to_search_result</code> converts back, because the rest of the app (citations, the <code>sources</code> frame, the <code>message_sources</code> snapshot) speaks <code>SearchResult</code>.</p>
+  </div>
+</section>
+
+<!-- ================= REWRITE ================= -->
+<section class="panel" id="rewrite" data-title="Query rewriting">
+  <h2>Follow-up questions: rewrite before you search</h2>
+  <p class="lead">"And how long do they nap?" is a fine question in a conversation and a useless search query: the vector has no idea what "they" is. A small chain turns it into <i>"how much do cats sleep"</i> using the recent messages, <b>for searching only</b>. The model still receives your real message.</p>
+
+  <div class="card">
+    <h3>Lab: same follow-up, with and without the rewrite</h3>
+    <p>This runs the real offline hashing embedder (the same algorithm as the backend's) against three tiny documents. Edit the query, or pick a preset. The threshold here is the backend's offline default.</p>
+    <div class="sim-row"><span class="chip" data-p="0">Follow-up, raw</span><span class="chip" data-p="1">Follow-up, rewritten</span><span class="chip" data-p="2">Another topic, raw</span><span class="chip" data-p="3">Another topic, rewritten</span></div>
+    <div class="sim-row"><input type="text" id="rwQ" aria-label="Search query" /> <label>threshold <input type="range" id="rwT" min="0" max="0.5" step="0.01" value="0.05" /> <b id="rwTv">0.05</b></label></div>
+    <div id="rwOut"></div>
+  </div>
+
+  <div class="pills" id="pills-rewrite"></div>
+  <div id="flow-rewrite"></div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>Rules that keep it safe and cheap</h3>
+    <ul>
+      <li><b>Skipped</b> when there is only one message, when "Use my documents" is off, and when there are no documents. No extra call in those cases.</li>
+      <li><b>Never blocks an answer.</b> Any failure (network, rate limit, odd output), an empty result or one over 500 characters falls back to your original question.</li>
+      <li><b>Cheap:</b> it sees the last 6 messages, each cut to 600 characters, and may answer in at most 120 tokens.</li>
+      <li><b>Search only.</b> The rewritten text is embedded and thrown away: it is not stored, not shown, and not sent to the answering model.</li>
+      <li><b>Costs one extra model call per follow-up.</b> Turn it off with <code>RAG_REWRITE_QUERIES=false</code>.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= TESTING ================= -->
+<section class="panel" id="testing" data-title="Testing">
+  <h2>How it is tested without a network</h2>
+  <p class="lead">The fake sits at the <b>bottom</b>: a real <code>ChatOpenAI</code> and the real chain run, and only the OpenAI SDK's HTTP-calling <code>chat.completions</code> resource is replaced. That keeps almost every older test valid, and the tests exercise the actual LangChain code.</p>
+  <div class="card">
+    <div class="tablewrap"><table>
+      <tr><th>Test file</th><th>Proves</th></tr>
+      <tr><td><code>tests/test_llm.py</code></td><td>Braces in user text are never treated as template variables; roles and order reach the provider; the system addendum is appended to the server's prompt; the model is built from env (<code>base_url</code>, model, token cap) once</td></tr>
+      <tr><td><code>tests/test_stream.py</code>, <code>test_conversations.py</code></td><td>A failure <i>before</i> the first token is an HTTP error; after it, an <code>error</code> event; closing the generator closes the upstream stream and saves the partial text</td></tr>
+      <tr><td><code>tests/test_retriever.py</code></td><td>Returns <code>Document</code>s with metadata; <code>min_score</code> filters; converts back to <code>SearchResult</code></td></tr>
+      <tr><td><code>tests/test_rewrite.py</code></td><td>First question: no extra call. A vague follow-up finds the right document with the rewrite and finds nothing without it. The model still gets the real question; the stored message is unchanged; the rewriter sees recent history; failures and empty or over-long output fall back; no call when there are no documents</td></tr>
+    </table></div>
+    <div class="note good"><b>Also checked over real HTTP:</b> the backend was run against a local OpenAI-compatible server: a normal stream, a 401 before the first token (safe 500), and a connection drop mid-stream (an <code>error</code> event with the partial text kept). Nothing was tested against a real provider in this environment.</div>
+  </div>
+</section>
+
+<!-- ================= DECISIONS ================= -->
+<section class="panel" id="decisions" data-title="Decisions">
+  <h2>Decisions, trade-offs and what was not adopted</h2>
+  <div class="card">
+    <h3>Honest framing</h3>
+    <p>Nothing in this app <i>needed</i> LangChain. The hand-written version was small and fully tested. What the migration buys: a standard model and retriever interface (swap providers or stores in one place), a place to grow (more chains, agents), and one real feature, the follow-up rewrite. What it costs: dependencies, and an API that moves between versions.</p>
+  </div>
+  <div class="card">
+    <h3>Deliberate non-adoptions</h3>
+    <div class="tablewrap"><table>
+      <tr><th>LangChain offers</th><th>Not used because</th></tr>
+      <tr><td><code>RecursiveCharacterTextSplitter</code></td><td>The existing chunker is sentence-aware, fully tested, and <b>mirrored in TypeScript for the demo with a parity test against the Python output</b>. Swapping it would break that parity for no gain.</td></tr>
+      <tr><td><code>PyPDFLoader</code> and other loaders</td><td>They read from a file path (and live in the heavy <code>langchain-community</code> package). Uploads are processed <b>in memory and never written to disk</b>, which is a documented security property. <code>pypdf</code> already does the job.</td></tr>
+      <tr><td>Vector stores (Chroma, FAISS)</td><td>The SQLite store holds the citation snapshots and per-model vectors the app relies on, and brute force is exact. A retriever wrapper gives the same interface.</td></tr>
+      <tr><td>LangGraph</td><td>The flow is linear (rewrite, retrieve, answer). A graph would add structure without adding behaviour; revisit when there are tools or branching.</td></tr>
+      <tr><td>LangSmith tracing</td><td>Tracing sends prompts and replies to a third party, which conflicts with "message text is never logged". If added, it must be opt-in and off by default.</td></tr>
+    </table></div>
+  </div>
+  <div class="card">
+    <h3>Things to watch</h3>
+    <ul>
+      <li><b>Versions.</b> <code>langchain-core</code> and <code>langchain-openai</code> are pinned only by minimum version. Pin exact versions (a lock file) before deploying.</li>
+      <li><b>Rewrite quality is unmeasured.</b> It is tested with a scripted model, so tests prove the plumbing and the fallbacks, not how well a real model rewrites. Check it on your own conversations.</li>
+      <li><b>Rate limits.</b> A follow-up with documents makes two provider calls. On a tight free tier, turn the rewrite off.</li>
+      <li><b>Priming the stream.</b> <code>open_reply_stream</code> now waits for the first piece of text before returning, so any pre-token failure is an HTTP error. (A failing first chunk used to become an in-stream error event.)</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= CONFIG ================= -->
+<section class="panel" id="config" data-title="Config & API">
+  <h2>What changed in configuration and the API</h2>
+  <div class="card">
+    <div class="tablewrap"><table>
+      <tr><th>Item</th><th>Change</th></tr>
+      <tr><td><code>OPENAI_API_KEY</code>, <code>OPENAI_MODEL</code>, <code>OPENAI_BASE_URL</code></td><td>Unchanged; now feed <code>ChatOpenAI</code></td></tr>
+      <tr><td><code>RAG_REWRITE_QUERIES</code></td><td><b>New.</b> <code>true</code> by default; <code>false</code> disables follow-up rewriting</td></tr>
+      <tr><td><code>requirements.txt</code></td><td>Adds <code>langchain-core</code> and <code>langchain-openai</code></td></tr>
+      <tr><td>HTTP endpoints and stream frames</td><td><b>None changed.</b> One behaviour difference: a provider failure on the very first chunk is now an HTTP error rather than an in-stream <code>error</code> event</td></tr>
+      <tr><td>Module rename</td><td><code>services/openai_service.py</code> became <code>services/llm.py</code></td></tr>
+    </table></div>
+  </div>
+</section>
+
+</main>
+<footer>Continues <code>AI-Chat-RAG-Flows-Guide.html</code> (Phases 12 and 13). Source: <code>README.md</code>, <code>docs/</code>, and the code itself.</footer>
+
+<script>
+// ---- services/embeddings.py: HashingEmbedder (matches shared words, not meaning) ----
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+  return t;
+})();
+function crc32(str) {
+  let c = 0xFFFFFFFF;
+  for (const b of new TextEncoder().encode(str)) c = CRC_TABLE[(c ^ b) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+const HASH_DIM = 384;
+const STOPWORDS = new Set('a an and are as at be by for from has have in is it its of on or that the this to was were will with'.split(' '));
+function hashEmbed(text) {
+  const v = new Float32Array(HASH_DIM);
+  for (const word of (text.toLowerCase().match(/[a-z0-9]+/g) || [])) {
+    if (STOPWORDS.has(word)) continue;
+    const h = crc32(word);
+    v[h % HASH_DIM] += (h >>> 16) & 1 ? 1 : -1;
+  }
+  let norm = 0;
+  for (const x of v) norm += x * x;
+  norm = Math.sqrt(norm) || 1;
+  return v.map((x) => x / norm);                    // unit length: cosine == dot product
+}
+function dot(a, b) { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; }
+
+
+const LANE = {
+  you: { label: 'You',        sub: 'keyboard / mouse', color: 'var(--c-user)' },
+  ui:  { label: 'React UI',   sub: 'browser',          color: 'var(--c-ui)' },
+  api: { label: 'FastAPI',    sub: 'routes + RAG',     color: 'var(--c-api)' },
+  lc:  { label: 'LangChain',  sub: 'chain / retriever', color: '#0d9488' },
+  emb: { label: 'Embedder',   sub: 'local model',      color: 'var(--c-env)' },
+  db:  { label: 'SQLite',     sub: 'chat.db',          color: 'var(--c-db)' },
+  ai:  { label: 'AI provider', sub: 'OpenAI / Groq',   color: 'var(--c-ai)' }
+};
+const FLOWS = {};
+
+/* ---------- The chain ---------- */
+FLOWS.chain = [
+  { name: 'Send a message', lanes: ['ui', 'api', 'lc', 'ai', 'db'],
+    intro: 'The path of one message through the LangChain chain. The first two steps are exactly as before.',
+    steps: [
+      { f: 'ui', t: 'api', label: 'POST …/messages/stream', title: '1. The request (unchanged)', text: 'The browser sends the new text and its <code>client_message_id</code>. Nothing about the API changed.' },
+      { f: 'api', t: 'db', kind: 'db', label: 'store message, load last 20', title: '2. Store and load context (unchanged)', text: 'The user message is saved once per id and the server loads its own context. With "Use my documents" on, retrieval runs here (see the Retriever and Query rewriting tabs) and produces a system addendum plus the final user text.' },
+      { f: 'api', t: 'lc', label: 'open_reply_stream(msgs, addendum)', title: '3. Hand over to the chain', text: '<code>_inputs()</code> turns the stored messages into <code>HumanMessage</code> / <code>AIMessage</code> objects and builds the system text: the server\'s prompt plus the RAG addendum.', code: 'llm.py: _inputs, open_reply_stream' },
+      { f: 'lc', t: 'lc', label: 'ChatPromptTemplate', title: '4. The prompt', text: '<code>[("system", "{system}"), MessagesPlaceholder("history")]</code> places the system text first and the history after it. The history is message objects, so braces in what you typed are never interpreted as template variables.', code: 'llm.py: _PROMPT', data: 'system, user, assistant, … , user' },
+      { f: 'lc', t: 'ai', label: 'POST /chat/completions (stream)', title: '5. ChatOpenAI calls the provider', text: 'Same request as before: <code>model</code>, <code>messages</code>, <code>max_completion_tokens=800</code>, <code>stream=true</code>, to <code>OPENAI_BASE_URL</code> (Groq works). 30 s timeout, 2 retries.', code: 'llm.py: get_chat_model' },
+      { f: 'ai', t: 'lc', ret: true, label: 'chunk: "Hel", "lo", …', title: '6. Chunks arrive', text: 'The SDK yields chunks. <code>ChatOpenAI</code> wraps each in a message chunk.' },
+      { f: 'lc', t: 'lc', label: 'StrOutputParser', title: '7. Plain text pieces', text: 'The parser extracts the text. Some chunks carry none (the first, role-only one), so <code>_text_pieces</code> drops empty strings.', code: 'llm.py: _text_pieces' },
+      { f: 'lc', t: 'api', ret: true, label: 'first piece (primed)', title: '8. The first piece is awaited', text: '<code>open_reply_stream</code> waits for the first piece <b>before returning</b>. That is what lets any failure so far still become an HTTP error. A generator wraps the rest.', code: 'llm.py: next(pieces, None) then _replay' },
+      { f: 'api', t: 'ui', ret: true, label: 'event: sources, data: {delta}…', title: '9. Frames flow to the browser (unchanged)', text: 'Sources first (if retrieval ran), then one <code>data:</code> frame per piece. The UI renders them as before.' },
+      { f: 'api', t: 'db', kind: 'db', label: 'save reply + citations', title: '10. Saved when the stream ends', text: 'However it ends (done, error, or Stop), whatever text arrived is saved with its citation snapshot, then <code>event: done</code>.' }
+    ] },
+  { name: 'Errors: before vs after the first token', lanes: ['ui', 'api', 'lc', 'ai'],
+    intro: 'The same failure is reported differently depending on when it happens. This is what priming the stream guarantees.',
+    steps: [
+      { f: 'api', t: 'lc', label: 'open_reply_stream', title: '1. Open the stream', text: 'The route is still able to choose an HTTP status because nothing has been sent to the browser.' },
+      { f: 'lc', t: 'ai', kind: 'err', label: 'request fails / bad key / 429', title: '2a. Failure BEFORE any text', text: 'The SDK raises <code>AuthenticationError</code>, <code>RateLimitError</code>, a timeout, etc. They pass through <code>ChatOpenAI</code> unchanged.' },
+      { f: 'lc', t: 'api', kind: 'err', ret: true, label: 'ChatServiceError (safe text)', title: '3a. Translated and raised at open time', text: '<code>_translate</code> maps it (504, 502, 429, 500) with a fixed, friendly message. Upstream error text never leaves the server.', code: 'llm.py: _translate' },
+      { f: 'api', t: 'ui', kind: 'err', ret: true, label: 'HTTP 4xx/5xx + {detail}', title: '4a. An ordinary HTTP error', text: 'The user message stays saved, so Retry (same id) works without duplicating it.' },
+      { f: 'ai', t: 'lc', ret: true, label: 'chunk "Par"…', title: '2b. Failure AFTER text started', text: 'The first piece arrived and the response is already <code>200</code> with frames on the wire.' },
+      { f: 'lc', t: 'api', kind: 'err', ret: true, label: 'connection drops → ChatServiceError', title: '3b. Raised from inside the generator', text: 'The same translation runs inside <code>_text_pieces</code>. The status can\'t change any more.' },
+      { f: 'api', t: 'ui', kind: 'err', ret: true, label: 'event: error {detail}', title: '4b. An in-stream error event', text: 'The partial text is kept and saved. The UI shows the error with Retry.' }
+    ] },
+  { name: 'Stop (closing the stream)', lanes: ['ui', 'api', 'lc', 'ai'],
+    intro: 'Pressing Stop aborts the browser request. The server must stop paying for tokens nobody will read. Closing cascades down the generators.',
+    steps: [
+      { f: 'ui', t: 'api', label: 'abort (connection closed)', title: '1. The client goes away', text: 'Starlette closes the response generator.' },
+      { f: 'api', t: 'api', label: 'sse_events: finally', title: '2. Save and close', text: 'The <code>finally</code> block closes <code>deltas</code> and saves whatever text was streamed so far.', code: 'streaming.py: sse_events' },
+      { f: 'api', t: 'lc', label: '_replay.close()', title: '3. Close cascades', text: '<code>_replay</code>\'s <code>finally</code> closes <code>_text_pieces</code>, whose <code>finally</code> closes the chain\'s stream.', code: 'llm.py: _replay, _text_pieces' },
+      { f: 'lc', t: 'ai', kind: 'err', label: 'close the HTTP response', title: '4. The provider connection ends', text: '<code>ChatOpenAI</code> holds the response in a <code>with</code> block, so closing the stream closes the connection. A test asserts the upstream stream is closed exactly once.', code: 'test_stream.py: test_closing_the_generator_closes_the_upstream_stream' }
+    ] }
+];
+
+/* ---------- Retriever ---------- */
+FLOWS.retriever = [
+  { name: 'Retrieve passages', lanes: ['api', 'lc', 'emb', 'db'],
+    intro: '<code>rag.retrieve(db, history)</code> end to end, with the retriever in the middle.',
+    steps: [
+      { f: 'api', t: 'db', kind: 'db', label: 'count documents', title: '1. Any documents at all?', text: 'Zero means retrieval is skipped entirely: no rewrite call, no embedding model load, and no <code>sources</code> frame.', code: 'rag.py: retrieve' },
+      { f: 'api', t: 'api', label: 'standalone_question(history)', title: '2. Make the query standalone', text: 'See the Query rewriting tab. For a first question this just returns the text.' },
+      { f: 'api', t: 'lc', label: 'SqliteRetriever(db, top_k=4, min_score).invoke(q)', title: '3. Invoke the retriever', text: 'A <code>BaseRetriever</code> subclass. LangChain provides <code>.invoke</code>; the class supplies <code>_get_relevant_documents</code>.', code: 'retriever.py' },
+      { f: 'lc', t: 'emb', label: 'embed_query(q)', title: '4. Embed the question', text: 'Unchanged: <code>retrieval.search</code> embeds the query with the configured embedder.' },
+      { f: 'lc', t: 'db', kind: 'db', label: 'read vectors, score, top k', title: '5. Brute-force cosine', text: 'Only vectors made by the current embedding model are compared. One matrix multiply scores every chunk.' },
+      { f: 'lc', t: 'lc', label: 'Document(page_content, metadata)', title: '6. Wrap as Documents, drop weak ones', text: 'Text becomes <code>page_content</code>; filename, position, document id and score go in <code>metadata</code>. Anything under <code>min_score</code> is dropped.' },
+      { f: 'lc', t: 'api', ret: true, label: 'list[Document]', title: '7. Back to RAG', text: '<code>to_search_result</code> converts them to <code>SearchResult</code>s for the prompt builder, the <code>sources</code> frame and the citation snapshot.' }
+    ] }
+];
+
+/* ---------- Rewrite ---------- */
+FLOWS.rewrite = [
+  { name: 'A follow-up question', lanes: ['you', 'api', 'lc', 'ai', 'emb'],
+    intro: 'Turn 1 was "tell me about cats". Now you type "and how long do they nap?".',
+    steps: [
+      { f: 'you', t: 'api', label: '"and how long do they nap?"', title: '1. A vague follow-up', text: 'Stored as typed. This text is what the answering model will see.' },
+      { f: 'api', t: 'api', label: 'history has 3 messages', title: '2. Is a rewrite needed?', text: 'Needed when the history has more than one message, "Use my documents" is on, documents exist, and <code>RAG_REWRITE_QUERIES</code> is not off.', code: 'rewrite.py: standalone_question' },
+      { f: 'api', t: 'lc', label: 'rewrite chain.invoke(last 6 msgs)', title: '3. The rewrite chain', text: '<code>prompt | model.bind(max_tokens=120) | StrOutputParser</code>. The system instruction: rewrite the LAST message as a standalone search query, do not answer it, output only the query. Each history message is cut to 600 characters.' },
+      { f: 'lc', t: 'ai', label: 'non-streaming completion', title: '4. One small model call', text: 'A normal (non-streaming) call. This is the extra cost of the feature.' },
+      { f: 'ai', t: 'lc', ret: true, label: '"how much do cats sleep"', title: '5. The standalone query', text: 'Whitespace is normalised and stray quotes stripped.' },
+      { f: 'lc', t: 'api', ret: true, label: 'query (≤ 500 chars) or fallback', title: '6. Validate', text: 'Empty or over 500 characters? The original question is used instead.' },
+      { f: 'api', t: 'emb', label: 'embed + search with the rewritten query', title: '7. Search with it', text: 'The retriever receives the rewritten text. Now the cats document scores well.' },
+      { f: 'api', t: 'lc', label: 'answer chain gets the ORIGINAL message', title: '8. Answer with the real question', text: 'The prompt\'s last user turn is <code>&lt;sources&gt;…&lt;/sources&gt; Question: and how long do they nap?</code>. A test asserts it, and that the stored message is unchanged.' }
+    ] },
+  { name: 'Skipped or failed', lanes: ['api', 'lc', 'ai'],
+    intro: 'The rewrite is an optimisation. It must never stop you getting an answer.',
+    steps: [
+      { f: 'api', t: 'api', label: 'only one message', title: 'Skipped: first question', text: 'Nothing to resolve, so the text is searched as is. No model call.' },
+      { f: 'api', t: 'api', label: 'RAG_REWRITE_QUERIES=false', title: 'Skipped: turned off', text: 'The switch for tight rate limits or cost control.' },
+      { f: 'api', t: 'api', label: 'no documents', title: 'Skipped: nothing to search', text: 'Retrieval is skipped before the rewrite is even considered.' },
+      { f: 'api', t: 'lc', label: 'rewrite chain.invoke', title: 'Attempted' , text: 'The call is made inside a <code>try</code>.' },
+      { f: 'lc', t: 'ai', kind: 'err', label: 'timeout / 429 / error', title: 'Failure: any exception', text: 'Caught broadly. Only the exception <b>type</b> is logged, never text.' },
+      { f: 'lc', t: 'api', kind: 'err', ret: true, label: 'original question', title: 'Fallback', text: 'The user\'s question is searched exactly as before this feature existed. Empty and over-long outputs fall back the same way.' }
+    ] }
+];
+
+
+/* =====================================================================
+   Flow player
+   ===================================================================== */
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Keep the current step on screen by scrolling the PAGE vertically only: not hidden
+// under the sticky header, nor (on phones) under the bottom-sheet detail panel.
+function ensureVisible(el, detailPanel) {
+  const r = el.getBoundingClientRect();
+  const sheet = getComputedStyle(detailPanel).position === 'sticky' && matchMedia('(max-width: 880px)').matches
+    ? detailPanel.getBoundingClientRect().height : 0;
+  const topLimit = 110, bottomLimit = innerHeight - sheet - 12;
+  if (r.top < topLimit) window.scrollBy({ top: r.top - topLimit, behavior: 'smooth' });
+  else if (r.bottom > bottomLimit) window.scrollBy({ top: r.bottom - bottomLimit, behavior: 'smooth' });
+}
+
+function renderFlow(host, flow) {
+  host.innerHTML = '';
+  const lanes = flow.lanes, n = lanes.length;
+  const W = 860, padX = 86, rowH = 60, top = 104;
+  const gap = n > 1 ? (W - 2 * padX) / (n - 1) : 0;
+  const xOf = (id) => padX + lanes.indexOf(id) * gap;
+  const H = top + flow.steps.length * rowH + 20;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sequence diagram: ${esc(flow.name)}">
+    <defs>
+      <marker id="mn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk-n" d="M0,0 L10,5 L0,10 z"/></marker>
+      <marker id="md" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk-d" d="M0,0 L10,5 L0,10 z"/></marker>
+      <marker id="me" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk-e" d="M0,0 L10,5 L0,10 z"/></marker>
+    </defs>`;
+  lanes.forEach((id) => {
+    const L = LANE[id], x = xOf(id);
+    svg += `<g class="lane-head"><line class="lifeline" x1="${x}" y1="58" x2="${x}" y2="${H - 8}" style="stroke:${L.color}"/>
+      <rect x="${x - 58}" y="10" width="116" height="46" rx="10" style="stroke:${L.color}"/>
+      <text class="t1" x="${x}" y="31" text-anchor="middle">${esc(L.label)}</text>
+      <text class="t2" x="${x}" y="46" text-anchor="middle">${esc(L.sub)}</text></g>`;
+  });
+  flow.steps.forEach((s, i) => {
+    const y = top + i * rowH + rowH / 2, yTop = top + i * rowH;
+    const kind = s.kind === 'db' ? 'k-db' : s.kind === 'err' ? 'k-err' : 'k-n';
+    const mk = s.kind === 'db' ? 'md' : s.kind === 'err' ? 'me' : 'mn';
+    const x1 = xOf(s.f), x2 = xOf(s.t);
+    let shape, label;
+    if (s.f === s.t) {
+      const last = lanes.indexOf(s.f) === n - 1, d = last ? -1 : 1;
+      shape = `<path class="arrow" marker-end="url(#${mk})" d="M ${x1} ${y - 11} h ${d * 36} v 22 h ${-d * 32}"/>`;
+      label = `<text class="lbl" x="${x1 + d * 44}" y="${y + 4}" text-anchor="${last ? 'end' : 'start'}">${esc(s.label)}</text>`;
+    } else {
+      const dir = x2 > x1 ? 1 : -1;
+      shape = `<line class="arrow" marker-end="url(#${mk})" x1="${x1 + dir * 4}" y1="${y}" x2="${x2 - dir * 4}" y2="${y}"/>`;
+      label = `<text class="lbl" x="${(x1 + x2) / 2}" y="${y - 9}" text-anchor="middle">${esc(s.label)}</text>`;
+    }
+    svg += `<g class="step future ${kind} ${s.ret ? 'ret' : ''}" data-i="${i}" tabindex="0" role="button" aria-label="Step ${i + 1}: ${esc(s.title || s.label)}">
+      <rect class="hit" x="0" y="${yTop}" width="${W}" height="${rowH}"/>
+      ${shape}${label}
+      <circle class="badge" cx="20" cy="${y}" r="12"/><text class="bn" x="20" y="${y + 4}">${i + 1}</text></g>`;
+  });
+  svg += '</svg>';
+
+  const layout = document.createElement('div');
+  layout.className = 'flowlayout';
+  layout.innerHTML = `<div class="flowdiagram">${svg}</div>
+    <aside class="flowdetail" aria-live="polite">
+      <div class="controls">
+        <button data-act="prev">◀ Prev</button><button data-act="next" class="active">Next ▶</button>
+        <button data-act="play">▶ Play</button><button data-act="reset">↺</button>
+        <span class="stepcount"></span>
+      </div>
+      <div class="detail"></div>
+    </aside>`;
+  host.appendChild(layout);
+
+  const stepEls = [...layout.querySelectorAll('.step')];
+  const detail = layout.querySelector('.detail');
+  const count = layout.querySelector('.stepcount');
+  const btn = (a) => layout.querySelector(`[data-act="${a}"]`);
+  let idx = -1, timer = null;
+
+  function stopPlay() { clearInterval(timer); timer = null; btn('play').textContent = '▶ Play'; }
+  function show(i, scroll) {
+    idx = Math.max(-1, Math.min(flow.steps.length - 1, i));
+    stepEls.forEach((el, k) => {
+      el.classList.toggle('future', k > idx);
+      el.classList.toggle('current', k === idx);
+    });
+    btn('prev').disabled = idx < 0;
+    btn('next').disabled = idx >= flow.steps.length - 1;
+    count.textContent = idx < 0 ? `${flow.steps.length} steps` : `Step ${idx + 1} of ${flow.steps.length}`;
+    if (idx < 0) {
+      detail.innerHTML = `<h4>${esc(flow.name)}</h4><p>${flow.intro || ''}</p><p class="lead" style="margin:0">Press <b>Next</b> or <b>Play</b>. You can also click any step in the diagram.</p>`;
+    } else {
+      const s = flow.steps[idx];
+      detail.innerHTML = `<h4>${esc(s.title || s.label)}</h4>${s.text ? `<p>${s.text}</p>` : ''}`;
+      if (s.code) { const c = document.createElement('code'); c.className = 'coderef'; c.textContent = s.code; detail.appendChild(c); }
+      if (s.data) { const p = document.createElement('pre'); p.textContent = s.data; detail.appendChild(p); }
+      if (scroll) ensureVisible(stepEls[idx], layout.querySelector('.flowdetail'));
+    }
+    if (idx >= flow.steps.length - 1) stopPlay();
+  }
+  stepEls.forEach((el, k) => {
+    el.addEventListener('click', () => { stopPlay(); show(k, false); });
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); stopPlay(); show(k, false); } });
+  });
+  btn('prev').onclick = () => { stopPlay(); show(idx - 1, true); };
+  btn('next').onclick = () => { stopPlay(); show(idx + 1, true); };
+  btn('reset').onclick = () => { stopPlay(); show(-1, false); };
+  btn('play').onclick = () => {
+    if (timer) { stopPlay(); return; }
+    if (idx >= flow.steps.length - 1) show(-1, false);
+    btn('play').textContent = '⏸ Pause';
+    timer = setInterval(() => show(idx + 1, true), 2600);
+  };
+  show(-1, false);
+}
+
+function mountFlowSection(id) {
+  const host = document.getElementById('flow-' + id);
+  const pills = document.getElementById('pills-' + id);
+  const flows = FLOWS[id];
+  const pick = (k) => {
+    if (pills) [...pills.children].forEach((b, j) => b.classList.toggle('active', j === k));
+    renderFlow(host, flows[k]);
+  };
+  if (pills) flows.forEach((f, k) => {
+    const b = document.createElement('button'); b.className = 'chip'; b.textContent = f.name; b.onclick = () => pick(k); pills.appendChild(b);
+  });
+  pick(0);
+}
+Object.keys(FLOWS).forEach(mountFlowSection);
+
+
+
+/* =====================================================================
+   Rewrite lab
+   ===================================================================== */
+(() => {
+  const DOCS = [
+    ['cats.txt', 'Cats are small carnivorous mammals. A cat sleeps most of the day and purrs when content. Kittens play with string.'],
+    ['python.txt', 'Python is a programming language. Python code is readable, and Python has a large standard library for developers.'],
+    ['space.txt', 'The planet Jupiter is a gas giant. Jupiter has dozens of moons and a great red storm in its atmosphere.']
+  ];
+  const VEC = DOCS.map(([n, t]) => [n, t, hashEmbed(t)]);
+  const PRESETS = [
+    'and how long do they nap?', 'how much do cats sleep',
+    'what about its moons?', 'how many moons does Jupiter have'
+  ];
+  const $ = (id) => document.getElementById(id);
+  const q = $('rwQ'), th = $('rwT'), out = $('rwOut');
+  function run() {
+    $('rwTv').textContent = (+th.value).toFixed(2);
+    const qv = hashEmbed(q.value || ' ');
+    const rows = VEC.map(([n, t, v]) => ({ n, t, s: dot(qv, v) })).sort((a, b) => b.s - a.s);
+    const keep = rows.filter((r) => r.s >= +th.value);
+    out.innerHTML = rows.map((r) => {
+      const sent = r.s >= +th.value;
+      return `<div class="sres ${sent ? 'sent' : 'dropped'}"><div class="hit-top"><span><b>${esc(r.n)}</b></span><span><span class="hit-score">${r.s.toFixed(3)}</span> <span class="hit-state">${sent ? 'kept' : 'below threshold'}</span></span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.max(0, Math.min(1, r.s)) * 100}%"></div><div class="bar-th" style="left:${(+th.value) * 100}%"></div></div>
+        <div class="hit-text">${esc(r.t)}</div></div>`;
+    }).join('') + `<div class="note ${keep.length ? 'good' : 'bad'}">${keep.length ? `${keep.length} passage(s) would be sent to the model.` : 'Nothing relevant found: the model is told the documents did not cover it.'}</div>`;
+  }
+  document.querySelectorAll('[data-p]').forEach((c) => { c.onclick = () => { q.value = PRESETS[+c.dataset.p]; run(); }; });
+  q.oninput = run; th.oninput = run;
+  q.value = PRESETS[0]; run();
+})();
+
+/* =====================================================================
+   Tabs + theme
+   ===================================================================== */
+const panels = [...document.querySelectorAll('section.panel')];
+const tabs = document.getElementById('tabs');
+function showPanel(id, initial) {
+  panels.forEach((p) => p.classList.toggle('active', p.id === id));
+  [...tabs.children].forEach((b) => b.classList.toggle('active', b.dataset.id === id));
+  // Not on the initial render: writing a hash while loading makes the browser jump
+  // to that section's top once loading completes, hiding the heading under the header.
+  if (initial) return;
+  try { history.replaceState(null, '', '#' + id); } catch (e) {}
+  window.scrollTo(0, 0);
+}
+panels.forEach((p) => {
+  const b = document.createElement('button');
+  b.textContent = p.dataset.title; b.dataset.id = p.id; b.onclick = () => showPanel(p.id);
+  tabs.appendChild(b);
+});
+showPanel(panels.some((p) => p.id === location.hash.slice(1)) ? location.hash.slice(1) : 'overview', true);
+
+const themeBtn = document.getElementById('theme');
+let theme = null;
+try { theme = localStorage.getItem('theme'); } catch (e) {}
+function applyTheme() {
+  const dark = theme ? theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  themeBtn.textContent = dark ? 'Light mode' : 'Dark mode';
+}
+themeBtn.onclick = () => {
+  theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem('theme', theme); } catch (e) {}
+  applyTheme();
+};
+applyTheme();
+
+
+
+window.__flows = FLOWS; window.__lanes = LANE;
+
+</script>
+</body>
+</html>

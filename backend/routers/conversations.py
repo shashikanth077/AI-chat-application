@@ -16,9 +16,11 @@ from schemas import (
     ConversationSummary,
     NewMessageRequest,
 )
+from guardrails.checks import GuardrailBlocked, check_input, guard_stream
+from guardrails.hardening import rate_limit
 from services import rag
 from services.embeddings import EmbeddingError
-from services.openai_service import ChatServiceError, open_reply_stream
+from services.llm import ChatServiceError, open_reply_stream
 from streaming import sse, sse_response
 
 logger = logging.getLogger(__name__)
@@ -99,7 +101,7 @@ def list_conversations(db: Session = Depends(get_db)) -> list[Conversation]:
     )
 
 
-@router.post("", response_model=ConversationSummary, status_code=201)
+@router.post("", response_model=ConversationSummary, status_code=201, dependencies=[Depends(rate_limit("conversations", "RATE_LIMIT_CONVERSATIONS_PER_MINUTE", 60))])
 def create_conversation(db: Session = Depends(get_db)) -> Conversation:
     conversation = Conversation(title=DEFAULT_TITLE)
     db.add(conversation)
@@ -119,13 +121,20 @@ def delete_conversation(conversation_id: str, db: Session = Depends(get_db)) -> 
     return Response(status_code=204)
 
 
-@router.post("/{conversation_id}/messages/stream")
+@router.post("/{conversation_id}/messages/stream", dependencies=[Depends(rate_limit("messages", "RATE_LIMIT_MESSAGES_PER_MINUTE", 30))])
 def send_message(
     conversation_id: str,
     body: NewMessageRequest,
     db: Session = Depends(get_db),
 ):
     conversation = _get_or_404(db, conversation_id)
+
+    # Guardrails run before anything is stored or sent to the model: a secret is refused
+    # outright, personal data is masked, and only the masked text is ever saved.
+    try:
+        checked = check_input(body.content)
+    except GuardrailBlocked as exc:
+        raise HTTPException(status_code=422, detail=exc.message, headers={"X-Guardrail": "blocked"})
 
     existing = db.scalar(
         select(Message).where(
@@ -143,12 +152,12 @@ def send_message(
         )
     else:
         if conversation.title == DEFAULT_TITLE:
-            conversation.title = _make_title(body.content)
+            conversation.title = _make_title(checked.text)
         db.add(
             Message(
                 conversation_id=conversation_id,
                 role="user",
-                content=body.content,
+                content=checked.text,
                 client_id=body.client_message_id,
             )
         )
@@ -162,7 +171,7 @@ def send_message(
     passages: list[SearchResult] | None = None
     if body.use_documents:
         try:
-            passages = rag.retrieve(db, context[-1].content)  # the newest user message
+            passages = rag.retrieve(db, context)
         except EmbeddingError:
             raise HTTPException(
                 status_code=503,
@@ -177,11 +186,14 @@ def send_message(
 
     # The sources are the first frame, before any text, so the UI can show them
     # as soon as the answer starts. Not sent at all when retrieval did not run.
-    preface = None
+    preface = []
+    if checked.redacted:
+        # Tells the client what was masked, and what the message now says (it should show that, not what was typed).
+        preface.append(sse({"redacted": checked.redacted, "content": checked.text}, event="guardrail"))
     if passages is not None:
-        preface = [sse(
+        preface += [sse(
             {"sources": [{"n": i, "filename": p.filename, "position": p.position, "score": p.score, "text": p.text}
                          for i, p in enumerate(passages, 1)]},
             event="sources",
         )]
-    return sse_response(deltas, lambda text: _save_assistant_message(conversation_id, text, passages), preface)
+    return sse_response(guard_stream(deltas), lambda text: _save_assistant_message(conversation_id, text, passages), preface)

@@ -8,14 +8,23 @@ interface Props {
   disabled: boolean; // a reply is in flight
   onSend: (text: string) => void;
   onStop: () => void;
+  // Puts text back in the box (a refused message), once per change of `n`.
+  restore?: { text: string; n: number };
 }
 
 const MAX_HEIGHT_PX = 200;
 
-export function ChatInput({ disabled, onSend, onStop }: Props) {
+export function ChatInput({ disabled, onSend, onStop, restore }: Props) {
   const [text, setText] = useState('');
   const field = useRef<HTMLTextAreaElement>(null);
   const canSend = text.trim().length > 0 && !disabled;
+
+  // Adjusting state while rendering (not in an effect) is React's pattern for "reset when a prop changes".
+  const [seenRestore, setSeenRestore] = useState(restore);
+  if (restore !== seenRestore) {
+    setSeenRestore(restore);
+    if (restore) setText(restore.text);
+  }
 
   // Grow with the content up to a limit, then scroll.
   useEffect(() => {

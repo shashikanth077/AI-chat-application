@@ -5,6 +5,9 @@ export interface DocumentSummary {
   size_bytes: number;
   chunk_count: number;
   created_at: string;
+  // Only on the upload response: what the guardrails masked or flagged.
+  redacted?: Record<string, number>;
+  warnings?: string[];
 }
 
 export interface SearchResult {

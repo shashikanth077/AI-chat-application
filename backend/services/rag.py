@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 
 from models import Document
 from schemas import ChatMessage, SearchResult
-from services import retrieval
+from services import rewrite
 from services.embeddings import get_embedder
+from services.retriever import SqliteRetriever, to_search_result
 
 MAX_PASSAGES = 4  # how many chunks to put in front of the model
 
@@ -37,16 +38,18 @@ def min_score() -> float:
     return get_embedder().default_min_score
 
 
-def retrieve(db: Session, question: str) -> list[SearchResult] | None:
-    """Relevant passages for the question.
+def retrieve(db: Session, history: list[ChatMessage]) -> list[SearchResult] | None:
+    """Relevant passages for the newest message in `history` (a follow-up is first made standalone).
 
     None means retrieval did not run (there are no documents at all), so there
     is nothing to tell the user. An empty list means it ran and found nothing relevant.
     """
     if db.scalar(select(func.count()).select_from(Document)) == 0:
         return None
-    threshold = min_score()
-    return [p for p in retrieval.search(db, question, MAX_PASSAGES) if p.score >= threshold]
+    # The model still sees the user's real message; only the search uses the standalone one.
+    query = rewrite.standalone_question(history)
+    retriever = SqliteRetriever(db=db, top_k=MAX_PASSAGES, min_score=min_score())
+    return [to_search_result(doc) for doc in retriever.invoke(query)]
 
 
 def _neutralize(text: str) -> str:

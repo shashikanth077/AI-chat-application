@@ -2,7 +2,8 @@ import httpx
 import openai
 import pytest
 
-from services import openai_service
+from services import llm
+from helpers import completion
 
 USER_HI = {"messages": [{"role": "user", "content": "hi"}]}
 REQ = httpx.Request("POST", "http://test")
@@ -67,14 +68,14 @@ def test_openai_errors_map_to_safe_http_errors(client, fake_openai, error, statu
 def test_missing_config_is_a_safe_500(client, monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_MODEL", raising=False)
-    monkeypatch.setattr(openai_service, "_client", None)
+    monkeypatch.setattr(llm, "_model", None)
     r = client.post("/chat", json=USER_HI)
     assert r.status_code == 500
     assert r.json()["detail"] == "The server is not configured correctly."
 
 
 def test_empty_model_reply_is_502(client, fake_openai):
-    fake_openai.chat.completions.create.return_value.choices[0].message.content = "  "
+    fake_openai.chat.completions.create.return_value = completion("  ")
     assert client.post("/chat", json=USER_HI).status_code == 502
 
 

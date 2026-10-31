@@ -14,6 +14,13 @@ interface Props {
   onClose: () => void;
 }
 
+function describeGuardrails(g: Info['guardrails']): string {
+  if (!g.enabled) return 'off';
+  const secrets = { block: 'secrets refused', redact: 'secrets masked', off: 'secrets unchecked' }[g.secrets] ?? g.secrets;
+  const pii = { redact: 'personal data masked', block: 'personal data refused', off: 'personal data unchecked' }[g.pii] ?? g.pii;
+  return `${secrets}, ${pii}`;
+}
+
 export function AboutDialog({ info, demo, onClose }: Props) {
   const closeButton = useRef<HTMLButtonElement>(null);
   return (
@@ -71,6 +78,8 @@ export function AboutDialog({ info, demo, onClose }: Props) {
             <dd>{info.embedding_model}</dd>
             <dt>Context</dt>
             <dd>last {info.limits.history_messages} messages</dd>
+            <dt>Guardrails</dt>
+            <dd>{describeGuardrails(info.guardrails)}</dd>
           </dl>
         </>
       )}

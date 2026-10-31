@@ -106,6 +106,9 @@ class DocumentSummary(BaseModel):
     size_bytes: int
     chunk_count: int
     created_at: datetime
+    # Only filled in on the upload response: what the guardrails masked or flagged.
+    redacted: dict[str, int] = {}
+    warnings: list[str] = []
 
 
 class SearchRequest(BaseModel):
@@ -131,6 +134,12 @@ class InfoLimits(BaseModel):
     max_documents: int
 
 
+class InfoGuardrails(BaseModel):
+    enabled: bool
+    secrets: str  # block | redact | off
+    pii: str      # redact | block | off
+
+
 class InfoResponse(BaseModel):
     """Non-secret facts about this deployment, shown in the UI. Never includes keys."""
 
@@ -142,3 +151,4 @@ class InfoResponse(BaseModel):
     embedding_backend: str
     embedding_model: str
     limits: InfoLimits
+    guardrails: "InfoGuardrails"
