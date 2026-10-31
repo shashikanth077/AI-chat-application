@@ -147,7 +147,7 @@
 <section class="panel" id="overview" data-title="Overview">
   <h2>The whole app, as it works today</h2>
   <p class="lead">This guide follows real requests through the real code, step by step. Use it after the first guide (<code>AI-Chat-Learning-Guide.html</code>, Phases 1 to 9). That guide explains the concepts; this one shows the finished app after streaming (Phase 10) and persistence (Phase 11).</p>
-  <div class="note"><b>Updated in Phase 15.</b> The model call now goes through a LangChain chain (<code>services/llm.py</code>) and document search through a retriever; the frames, errors and storage described here are unchanged. See <code>AI-Chat-LangChain-Guide.html</code> for the new pieces. Where a step below says "SDK", the OpenAI SDK is still what runs underneath.</div>
+  <div class="note"><b>Updated for Phases 15 and 16.</b> The model call is a LangChain chain (<code>services/llm.py</code>) and document search goes through a retriever. Phase 16 adds guardrails: secrets are refused and personal data is masked <b>before</b> anything is stored or sent to the model, replies are masked while they stream, and rate limits, a size cap and security headers sit around the API. The frames, errors and tables described here are unchanged apart from the additions marked in each flow. See <code>AI-Chat-LangChain-Guide.html</code> and <code>AI-Chat-Guardrails-Guide.html</code> for the detail.</div>
   <div class="note"><b>Phases 12 and 13 (documents and RAG) have their own guide:</b> <a href="AI-Chat-RAG-Flows-Guide.html"><b>AI-Chat-RAG-Flows-Guide.html</b></a>. With "Use my documents" <b>off</b>, the Send flow below is exact. With it <b>on</b>, four retrieval steps are added before the provider call, and the stream gains a <code>sources</code> frame (the new guide walks through both).</div>
 
   <div class="card">
@@ -164,10 +164,10 @@
 
       <rect x="350" y="20" width="300" height="250" rx="12" fill="none" stroke="var(--c-api)" stroke-width="2"/>
       <text x="500" y="44" text-anchor="middle" font-weight="700">FastAPI (backend)</text>
-      <rect x="366" y="56" width="268" height="32" rx="8" fill="var(--accent-soft)"/><text x="500" y="77" text-anchor="middle" font-size="12">CORS + routers (main.py, routers/)</text>
-      <rect x="366" y="94" width="268" height="32" rx="8" fill="var(--accent-soft)"/><text x="500" y="115" text-anchor="middle" font-size="12">Pydantic schemas (validation)</text>
+      <rect x="366" y="56" width="268" height="32" rx="8" fill="var(--accent-soft)"/><text x="500" y="77" text-anchor="middle" font-size="12">CORS, limits, guardrails (main.py)</text>
+      <rect x="366" y="94" width="268" height="32" rx="8" fill="var(--accent-soft)"/><text x="500" y="115" text-anchor="middle" font-size="12">Pydantic + guardrails/ (checks)</text>
       <rect x="366" y="132" width="268" height="32" rx="8" fill="var(--accent-soft)"/><text x="500" y="153" text-anchor="middle" font-size="12">streaming.py (SSE + save on finish)</text>
-      <rect x="366" y="170" width="268" height="32" rx="8" fill="var(--accent-soft)"/><text x="500" y="191" text-anchor="middle" font-size="12">services/llm.py</text>
+      <rect x="366" y="170" width="268" height="32" rx="8" fill="var(--accent-soft)"/><text x="500" y="191" text-anchor="middle" font-size="12">services/llm.py (LangChain)</text>
       <rect x="366" y="208" width="268" height="32" rx="8" fill="var(--accent-soft)"/><text x="500" y="229" text-anchor="middle" font-size="12">database.py + models.py (SQLAlchemy)</text>
 
       <rect x="730" y="40" width="230" height="86" rx="12" fill="none" stroke="var(--c-db)" stroke-width="2"/>
@@ -176,7 +176,7 @@
       <text x="845" y="110" text-anchor="middle" font-size="11" fill="var(--muted)">survives refresh + restart</text>
       <rect x="730" y="160" width="230" height="90" rx="12" fill="none" stroke="var(--c-ai)" stroke-width="2" stroke-dasharray="6 4"/>
       <text x="845" y="190" text-anchor="middle" font-weight="700">AI provider</text>
-      <text x="845" y="212" text-anchor="middle" font-size="12">OpenAI or Groq (base URL)</text>
+      <text x="845" y="212" text-anchor="middle" font-size="12">OpenAI or Groq (via ChatOpenAI)</text>
       <text x="845" y="230" text-anchor="middle" font-size="11" fill="var(--muted)">key only in backend .env</text>
 
       <line x1="270" y1="120" x2="348" y2="120" stroke="#8a94a6" stroke-width="2" marker-end="url(#ov)"/>
@@ -194,7 +194,7 @@
     <h3>What changed since the first guide</h3>
     <div class="note">The first guide's "Data flow" tab describes the Phase 5 to 9 app. It's still right about concepts, but the flow below replaced it.</div>
     <div class="tablewrap"><table>
-      <tr><th>Topic</th><th>Phases 1 to 9</th><th>Now (Phases 10 and 11)</th></tr>
+      <tr><th>Topic</th><th>Phases 1 to 9</th><th>Now (Phases 10 to 16)</th></tr>
       <tr><td>Endpoint the UI uses</td><td><code>POST /chat</code></td><td><code>POST /conversations/{id}/messages/stream</code></td></tr>
       <tr><td>Who owns history</td><td>The browser sent up to 20 messages</td><td>The server: it loads the last 20 from SQLite</td></tr>
       <tr><td>What the client sends</td><td>Whole history</td><td>Only the new text plus a message id</td></tr>
@@ -203,6 +203,10 @@
       <tr><td>Retry</td><td>Re-sent the same history</td><td>Re-sends the same message id; server replaces the partial answer</td></tr>
       <tr><td>Stop</td><td>None</td><td>Aborts the request; partial text is kept and saved</td></tr>
       <tr><td>Clear Chat</td><td>Emptied the screen</td><td>Deletes the open conversation</td></tr>
+      <tr><td>Model call</td><td>Hand-built calls to the OpenAI SDK</td><td>LangChain chain: <code>ChatPromptTemplate | ChatOpenAI | StrOutputParser</code></td></tr>
+      <tr><td>Message text</td><td>Stored exactly as typed</td><td>Checked first: secrets refused (422), personal data masked; only the masked text is stored</td></tr>
+      <tr><td>Reply text</td><td>Streamed as the model wrote it</td><td>Masked while streaming, so secrets and personal data never reach the browser or the database</td></tr>
+      <tr><td>Abuse protection</td><td>None</td><td>Per-client rate limits (429), 2.5 MB request cap (413), security headers, log scrubbing</td></tr>
     </table></div>
   </div>
 
@@ -216,11 +220,14 @@
       <tr><td><code>components/Sidebar.tsx</code></td><td>Saved chats, New chat, delete, mobile drawer</td><td>Conversations</td></tr>
       <tr><td><code>services/chatService.ts</code></td><td>Reads the SSE stream; <code>handleFrame</code></td><td>Streaming, Stop</td></tr>
       <tr><td><code>services/conversationService.ts</code>, <code>http.ts</code></td><td>CRUD calls; error text extraction; <code>fetchOrThrow</code></td><td>Startup, Conversations, Failures</td></tr>
-      <tr><td><code>backend/main.py</code></td><td>App, CORS, lifespan, stateless endpoints</td><td>Startup, Security</td></tr>
-      <tr><td><code>backend/routers/conversations.py</code></td><td>The five conversation routes; context loading; saving</td><td>Send, Memory, Database</td></tr>
+      <tr><td><code>backend/main.py</code></td><td>App, middleware (headers, size cap, CORS), lifespan, stateless endpoints</td><td>Startup, Security, Guardrails</td></tr>
+      <tr><td><code>backend/routers/conversations.py</code></td><td>The five conversation routes; guardrail check before saving; context loading; saving</td><td>Send, Memory, Database, Guardrails</td></tr>
       <tr><td><code>backend/schemas.py</code></td><td>Pydantic request/response models and limits</td><td>Send, Security</td></tr>
       <tr><td><code>backend/streaming.py</code></td><td><code>sse_events</code>: framing, close, save on finish</td><td>Streaming, Stop</td></tr>
-      <tr><td><code>backend/services/llm.py</code></td><td>SDK client, system prompt, <code>_translate</code> errors</td><td>Send, Failures</td></tr>
+      <tr><td><code>backend/services/llm.py</code></td><td>LangChain chain (prompt, <code>ChatOpenAI</code>, parser), priming the first token, <code>_translate</code> errors</td><td>Send, Streaming, Failures</td></tr>
+      <tr><td><code>backend/guardrails/checks.py</code>, <code>detectors.py</code>, <code>hardening.py</code></td><td>Input and output guards, detector patterns with checksums, rate limits, size cap, security headers, log scrubbing</td><td>Send, Streaming, Guardrails, Security</td></tr>
+      <tr><td><code>backend/services/rewrite.py</code>, <code>retriever.py</code></td><td>Follow-up questions made standalone before search; the store as a LangChain retriever</td><td>Send, Memory</td></tr>
+      <tr><td><code>frontend/src/lib/guardrails.ts</code></td><td>Names what was masked, for the notice (e.g. "1 email address")</td><td>Guardrails</td></tr>
       <tr><td><code>backend/database.py</code>, <code>models.py</code></td><td>Engine, sessions, tables</td><td>Startup, Database</td></tr>
     </table></div>
   </div>
@@ -233,7 +240,7 @@
   <p class="lead">Two separate startups: the backend process boots and prepares the database, then the browser loads the page and restores your last chat.</p>
   <div class="pills" id="pills-startup"></div>
   <div id="flow-startup"></div>
-  <div class="note good"><b>Why it matters:</b> the OpenAI client is deliberately not created at startup. The server boots without a key, so <code>/health</code> works and a missing key becomes a safe error on the first chat request instead of a crash.</div>
+  <div class="note good"><b>Why it matters:</b> the chat model (<code>ChatOpenAI</code>) is deliberately not created at startup. The server boots without a key, so <code>/health</code> works and a missing key becomes a safe error on the first chat request instead of a crash.</div>
 </section>
 
 <!-- ================= SEND ================= -->
@@ -270,7 +277,7 @@
         <pre id="memPayload">(send a message)</pre>
       </div>
     </div>
-    <div class="note">The newest user message is saved <b>before</b> the context is loaded, so the window always ends with it. Rows outside the window stay in the database and in your UI, but the model never sees them.</div>
+    <div class="note">The newest user message is saved <b>before</b> the context is loaded, so the window always ends with it. Everything in the window is the <b>masked</b> text: a secret was refused before it could be stored, and personal data was masked before it was saved (see the Guardrails tab). Rows outside the window stay in the database and in your UI, but the model never sees them.</div>
   </div>
   <div class="card">
     <h3>Why the server, not the browser?</h3>
@@ -301,12 +308,14 @@
     </div>
   </div>
   <div class="card">
-    <h3>The three frame types</h3>
+    <h3>The frame types</h3>
     <div class="tablewrap"><table>
       <tr><th>Frame</th><th>Looks like</th><th>Client does</th></tr>
       <tr><td>text</td><td><code>data: {"delta": "Hel"}</code></td><td>First one creates the assistant bubble; the rest append</td></tr>
       <tr><td>done</td><td><code>event: done</code> + <code>data: {}</code></td><td>Marks finished. A stream that ends without it is "interrupted"</td></tr>
       <tr><td>error</td><td><code>event: error</code> + <code>data: {"detail": "…"}</code></td><td>Throws; partial text stays, error box + Retry appear</td></tr>
+      <tr><td>sources</td><td><code>event: sources</code> + <code>data: {"sources": […]}</code></td><td>Sent before the text when documents were searched</td></tr>
+      <tr><td>guardrail</td><td><code>event: guardrail</code> + <code>data: {"redacted": {…}, "content": "…"}</code></td><td>Sent first when something was masked: shows the masked text and a notice</td></tr>
     </table></div>
   </div>
 </section>
@@ -334,10 +343,13 @@
       <tr><td>Conversation id unknown</td><td>404</td><td>"Conversation not found."</td><td>nothing</td></tr>
       <tr><td>Provider timeout</td><td>504</td><td>"The AI took too long to respond…"</td><td>nothing extra</td></tr>
       <tr><td>Provider unreachable</td><td>502</td><td>"Could not reach the AI service…"</td><td>nothing extra</td></tr>
-      <tr><td>Provider rate limit</td><td>429</td><td>"Too many requests…"</td><td>nothing extra</td></tr>
+      <tr><td>Provider rate limit (the provider's, not ours)</td><td>429</td><td>"Too many requests…"</td><td>nothing extra</td></tr>
       <tr><td>Bad API key, missing key or model</td><td>500</td><td>"The server is not configured correctly."</td><td>which setting, never the key</td></tr>
       <tr><td>Other provider error / empty reply</td><td>502</td><td>"The AI service returned an error." / "…empty response."</td><td>status code or exception type only</td></tr>
       <tr><td>Any of the above <i>after</i> streaming began</td><td>200 (already sent)</td><td>Same text, shown via <code>event: error</code>; partial answer kept</td><td>same</td></tr>
+      <tr><td>Message contains a secret (guardrail)</td><td>422 + <code>X-Guardrail: blocked</code></td><td>"That looks like it contains a secret…"; your text returns to the box</td><td>nothing: the text is never logged</td></tr>
+      <tr><td>Too many requests from this client (our limit)</td><td>429 + <code>Retry-After</code></td><td>"Too many requests. Please wait a moment and retry."</td><td>nothing extra</td></tr>
+      <tr><td>Request body too large</td><td>413</td><td>"The request is too large."</td><td>nothing extra</td></tr>
       <tr><td>Server down / CORS blocked</td><td>none</td><td>"Cannot reach the server. Is the backend running?"</td><td>(nothing reached it)</td></tr>
     </table></div>
   </div>
@@ -347,6 +359,7 @@
 <section class="panel" id="database" data-title="Database">
   <h2>The database: what is written, and when</h2>
   <p class="lead">Two tables. Click a write point to see the equivalent SQL, the code that does it, and what a page refresh would show.</p>
+  <div class="note good"><b>Since Phase 16,</b> <code>messages.content</code> never holds a secret or unmasked personal data. The guard runs before the first insert, and the masked text is what gets stored (for messages, replies and uploads alike).</div>
   <div class="card">
     <div class="tablewrap">
     <svg viewBox="0 0 880 250" width="100%" style="min-width:720px" role="img" aria-label="Entity relationship diagram">
@@ -390,6 +403,26 @@
     <p>A request's database session (the <code>get_db</code> dependency) is opened when the request starts and closed with it. The assistant reply is saved at the <i>end of a long stream</i>, possibly after the request's session is gone, and also when the client disconnects. So <code>_save_assistant_message</code> opens a fresh session (<code>database.SessionLocal()</code>) and commits on its own.</p>
     <pre>request session  ──open──[ lookup ▸ INSERT user ▸ COMMIT ▸ SELECT last 20 ]──closed──▶
 stream session                                    (later) ──open──[ INSERT assistant ▸ COMMIT ]──closed</pre>
+  </div>
+</section>
+
+<!-- ================= GUARDRAILS ================= -->
+<section class="panel" id="guard" data-title="Guardrails">
+  <h2>Guardrails: what is refused, what is masked, and where</h2>
+  <p class="lead">Phase 16 puts checks at every point where sensitive data can cross the boundary. The check always runs <b>before</b> the first database write, so a refused message leaves no trace, and a masked one is stored only in its masked form. These flows show each case end to end. The detail is in <code>AI-Chat-Guardrails-Guide.html</code>.</p>
+  <div class="pills" id="pills-guard"></div>
+  <div id="flow-guard"></div>
+  <div class="card" style="margin-top:16px">
+    <h3>Where each check runs</h3>
+    <div class="tablewrap"><table>
+      <tr><th>Check</th><th>Runs</th><th>On a secret</th><th>On personal data</th></tr>
+      <tr><td>Message in</td><td>After validation, before the first insert</td><td>Refused: 422, nothing stored</td><td>Masked, then stored</td></tr>
+      <tr><td>Reply out</td><td>While streaming, and once more at the end</td><td>Masked</td><td>Masked</td></tr>
+      <tr><td>Upload in</td><td>On the extracted text, before chunking and embedding</td><td>Whole file refused: 422</td><td>Masked, then indexed</td></tr>
+      <tr><td>Rate limit</td><td>Before the handler</td><td colspan="2">429 with Retry-After over the per-client limit</td></tr>
+      <tr><td>Size cap</td><td>Before the body is read</td><td colspan="2">413 over 2.5 MB (default)</td></tr>
+    </table></div>
+    <div class="note"><b>Honest limit:</b> these are pattern checks. They catch well-known key formats and checksummed numbers; they do not catch names or addresses, and they are a safety net, not a guarantee.</div>
   </div>
 </section>
 
@@ -440,6 +473,10 @@ stream session                                    (later) ──open──[ INSE
       <tr><td><code>OPENAI_MODEL</code></td><td><code>backend/.env</code></td><td><code>get_chat_model()</code></td><td>Every request</td></tr>
       <tr><td><code>OPENAI_BASE_URL</code></td><td><code>backend/.env</code> (empty = OpenAI, Groq URL for Groq)</td><td><code>get_chat_model()</code></td><td>When the client is created</td></tr>
       <tr><td><code>DATABASE_URL</code></td><td><code>backend/.env</code> (default <code>backend/chat.db</code>)</td><td><code>database.py</code></td><td>Import time</td></tr>
+      <tr><td><code>GUARDRAILS</code>, <code>GUARDRAIL_SECRETS</code>, <code>GUARDRAIL_PII</code></td><td><code>backend/.env</code></td><td><code>guardrails/policy.py</code></td><td>Each request (read live)</td></tr>
+      <tr><td><code>RATE_LIMIT_*_PER_MINUTE</code>, <code>MAX_REQUEST_BYTES</code>, <code>TRUST_PROXY</code></td><td><code>backend/.env</code></td><td><code>guardrails/hardening.py</code></td><td>Each request (read live)</td></tr>
+      <tr><td><code>RAG_REWRITE_QUERIES</code></td><td><code>backend/.env</code></td><td><code>services/rewrite.py</code></td><td>Each follow-up with documents on</td></tr>
+      <tr><td><code>CORS_ORIGINS</code></td><td><code>backend/.env</code></td><td><code>main.py</code></td><td>Startup (CORS middleware)</td></tr>
       <tr><td><code>VITE_API_URL</code></td><td><code>frontend/.env</code> (optional)</td><td><code>http.ts</code></td><td>Build/dev start. It's <b>public</b>, never put secrets here</td></tr>
     </table></div>
     <div class="note bad"><b>Not built yet: authentication.</b> Anyone who can reach the API can list, read and delete every conversation. That is acceptable for local use only; add user accounts and ownership checks before any deployment.</div>
@@ -449,7 +486,7 @@ stream session                                    (later) ──open──[ INSE
 <!-- ================= TESTING ================= -->
 <section class="panel" id="testing" data-title="Testing">
   <h2>Testing: what is real and what is faked</h2>
-  <p class="lead">42 automated backend tests, plus a browser-level rig used while building. Everything of yours runs for real; only the outside world is replaced.</p>
+  <p class="lead">187 automated backend tests and 172 frontend tests, plus a browser-level rig used while building. Everything of yours runs for real; only the outside world is replaced.</p>
   <div class="card">
     <div class="tablewrap">
     <svg viewBox="0 0 900 210" width="100%" style="min-width:720px" role="img" aria-label="What is mocked in tests">
@@ -458,7 +495,7 @@ stream session                                    (later) ──open──[ INSE
       <rect x="215" y="50" width="150" height="70" rx="10" fill="var(--ok-soft)" stroke="var(--ok)" stroke-width="2"/><text x="290" y="78" text-anchor="middle" font-weight="700">TestClient</text><text x="290" y="98" text-anchor="middle" font-size="11" fill="var(--muted)">in-process, no port</text>
       <rect x="420" y="30" width="190" height="110" rx="10" fill="var(--ok-soft)" stroke="var(--ok)" stroke-width="2"/><text x="515" y="58" text-anchor="middle" font-weight="700">YOUR code: REAL</text><text x="515" y="80" text-anchor="middle" font-size="11">routing, CORS, Pydantic,</text><text x="515" y="96" text-anchor="middle" font-size="11">error mapping, SSE, saving</text>
       <rect x="665" y="10" width="220" height="70" rx="10" fill="var(--ok-soft)" stroke="var(--ok)" stroke-width="2"/><text x="775" y="40" text-anchor="middle" font-weight="700">SQLite temp file: REAL</text><text x="775" y="60" text-anchor="middle" font-size="11" fill="var(--muted)">fresh file per test</text>
-      <rect x="665" y="100" width="220" height="70" rx="10" fill="var(--warn-soft)" stroke="var(--c-ai)" stroke-width="2" stroke-dasharray="6 4"/><text x="775" y="130" text-anchor="middle" font-weight="700">AI client: MOCKED</text><text x="775" y="150" text-anchor="middle" font-size="11" fill="var(--muted)">fake stream / raises errors</text>
+      <rect x="665" y="100" width="220" height="70" rx="10" fill="var(--warn-soft)" stroke="var(--c-ai)" stroke-width="2" stroke-dasharray="6 4"/><text x="775" y="130" text-anchor="middle" font-weight="700">AI SDK: FAKED</text><text x="775" y="150" text-anchor="middle" font-size="11" fill="var(--muted)">lowest layer; chain runs for real</text>
       <line x1="160" y1="85" x2="213" y2="85" stroke="#8a94a6" stroke-width="2" marker-end="url(#tt)"/>
       <line x1="365" y1="85" x2="418" y2="85" stroke="#8a94a6" stroke-width="2" marker-end="url(#tt)"/>
       <line x1="610" y1="60" x2="663" y2="45" stroke="#8a94a6" stroke-width="2" marker-end="url(#tt)"/>
@@ -471,15 +508,22 @@ stream session                                    (later) ──open──[ INSE
     <div class="tablewrap"><table>
       <tr><th>File</th><th>Tests</th><th>Proves</th></tr>
       <tr><td><code>test_chat.py</code></td><td>18</td><td>Validation (422, never calls the model), error mapping to status codes without leaking upstream text, missing config, CORS allows only the dev origin</td></tr>
-      <tr><td><code>test_stream.py</code></td><td>7</td><td>SSE framing, newline safety, empty chunks skipped, pre-stream errors are real HTTP errors, mid-stream errors become <code>event: error</code>, upstream stream closed</td></tr>
+      <tr><td><code>test_stream.py</code></td><td>8</td><td>SSE framing, newline safety, empty chunks skipped, pre-stream errors are real HTTP errors, mid-stream errors become <code>event: error</code>, upstream stream closed</td></tr>
       <tr><td><code>test_conversations.py</code></td><td>17</td><td>CRUD lifecycle, context comes from the DB, forged client history ignored, 20-message window, idempotent retry, partial answer saved and replaced, saved on cancel, cascade delete, foreign keys enforced</td></tr>
+      <tr><td><code>test_llm.py</code></td><td>4</td><td>Braces in user text are never treated as template variables, roles and order reach the provider, the system addendum is appended, the model is built from the environment once</td></tr>
+      <tr><td><code>test_retriever.py</code></td><td>3</td><td>The store returns LangChain <code>Document</code>s with metadata, <code>min_score</code> filters, and conversion back to search results</td></tr>
+      <tr><td><code>test_rewrite.py</code></td><td>11</td><td>No extra call for a first question; a vague follow-up finds the right document only with the rewrite; the model still gets the real question; failures and unusable output fall back; no call without documents</td></tr>
+      <tr><td><code>test_rag.py</code>, <code>test_documents.py</code>, <code>test_chunking.py</code></td><td>15, 29, 10</td><td>Passages and citations, the threshold, prompt-injection escaping, upload validation and limits, chunking boundaries and overlap</td></tr>
+      <tr><td><code>test_info.py</code></td><td>7</td><td>CORS configuration, <code>/info</code> exposes no secret, <code>client_id</code> lets regenerate work after a refresh</td></tr>
+      <tr><td><code>test_guardrails.py</code></td><td>65</td><td>Detector tables (known formats found, look-alikes left alone), streaming redaction at many chunk sizes, secrets refused and PII masked in messages, uploads and replies, rate limits, size caps, security headers, log scrubbing</td></tr>
+      <tr><td>Frontend (Vitest)</td><td>172</td><td>SSE parser and guardrail frame, markdown safety, citations, date handling, components, and the demo build's parity with the Python detectors (a generated fixture)</td></tr>
     </table></div>
     <div class="note">Tests were checked by <b>breaking the code on purpose</b>: removing the "drop partial answer" logic failed 2 tests, and turning off SQLite foreign keys exposed a gap that a new test now pins.</div>
   </div>
   <div class="card">
     <h3>The end-to-end rig (used while building)</h3>
     <ol>
-      <li>A tiny local server speaks the OpenAI streaming format, with scripted behaviors: a normal reply, a slow reply, a connection that dies mid-stream, and a 401.</li>
+      <li>A tiny local server speaks the OpenAI streaming format, with scripted behaviors: a normal reply, a slow reply, a connection that dies mid-stream, a 401, and a reply that leaks a fake key (to test the output guard).</li>
       <li>The real backend runs against it by setting <code>OPENAI_BASE_URL</code>, with a fresh SQLite file.</li>
       <li>A headless browser drives the real UI: streaming, Stop, refresh restore, retry without duplicates, delete, mobile drawer.</li>
     </ol>
@@ -524,10 +568,10 @@ FLOWS.startup = [
       { f: 'api', t: 'env', label: 'load_dotenv()', title: 'Secrets are loaded first', text: '<code>load_dotenv()</code> reads <code>backend/.env</code> into the process environment (OPENAI_API_KEY, OPENAI_MODEL, OPENAI_BASE_URL, DATABASE_URL). It runs <b>before</b> the other project imports, because <code>database.py</code> reads <code>DATABASE_URL</code> at import time. That ordering is why those imports carry <code>noqa: E402</code>.', code: 'main.py: load_dotenv() above the "from database import …" line' },
       { f: 'env', t: 'api', ret: true, label: 'os.environ filled', title: 'Environment ready', text: 'Nothing is validated yet: a missing key is not an error at startup. It becomes a safe 500 on the first chat request.' },
       { f: 'api', t: 'api', label: 'create engine', title: 'Database engine is created', text: '<code>make_engine()</code> builds a SQLAlchemy engine for <code>DATABASE_URL</code> (default <code>backend/chat.db</code>, anchored to the folder, so it\'s the same wherever you start uvicorn). For SQLite it allows use from other threads and turns on <code>PRAGMA foreign_keys</code> for every new connection. <b>No connection is opened and no file is created yet.</b>', code: 'database.py: make_engine, SessionLocal' },
-      { f: 'api', t: 'api', label: 'CORS + routers', title: 'Middleware and routes are registered', text: 'CORS middleware allows only <code>localhost:5173</code> and <code>127.0.0.1:5173</code> (methods GET, POST, DELETE). The conversations router and the stateless <code>/chat</code> endpoints are attached.', code: 'main.py: add_middleware, include_router' },
+      { f: 'api', t: 'api', label: 'middleware + routers', title: 'Middleware and routes are registered', text: 'Outermost first: the security-headers middleware and the 2.5 MB request-size cap wrap everything, then CORS (methods GET, POST, DELETE). CORS exposes the custom <code>X-Guardrail</code> and <code>Retry-After</code> headers to the browser. The conversations and documents routers are attached, each with its rate limit, and the stateless <code>/chat</code> endpoints too. The log filter is installed, so anything logged later is scrubbed.', code: 'main.py: add_middleware, install_log_scrubbing, include_router' },
       { f: 'api', t: 'db', kind: 'db', label: 'init_db(): CREATE TABLE', title: 'Tables are created if missing (lifespan)', text: 'The lifespan startup hook calls <code>init_db()</code> → <code>Base.metadata.create_all(engine)</code>. First run: <code>chat.db</code> is created with <code>conversations</code> and <code>messages</code>. Later runs: tables exist, so nothing changes. (<code>create_all</code> never alters existing tables; changing a model later needs a migration or deleting the dev DB.)', code: 'main.py: lifespan → database.init_db', data: 'CREATE TABLE IF NOT EXISTS conversations (...)\nCREATE TABLE IF NOT EXISTS messages (...)' },
       { f: 'db', t: 'api', ret: true, label: 'tables ready', title: 'Database ready' },
-      { f: 'api', t: 'term', ret: true, label: 'Listening on :8000', title: 'Server accepts requests', text: 'Uvicorn prints <code>Uvicorn running on http://127.0.0.1:8000</code>. Note what has <b>not</b> happened: no AI client exists yet. It\'s created lazily on the first chat request, which keeps <code>/health</code> working with no key.', code: 'llm.py: get_chat_model()' }
+      { f: 'api', t: 'term', ret: true, label: 'Listening on :8000', title: 'Server accepts requests', text: 'Uvicorn prints <code>Uvicorn running on http://127.0.0.1:8000</code>. Note what has <b>not</b> happened: no chat model exists yet. It\'s created lazily on the first chat request, which keeps <code>/health</code> working with no key.', code: 'llm.py: get_chat_model()' }
     ] },
   { name: 'Page loads', lanes: ['you', 'ui', 'ls', 'api', 'db'],
     intro: 'Open <code>http://localhost:5173</code>. Follow how the page finds and restores your last conversation.',
@@ -548,114 +592,117 @@ FLOWS.startup = [
 /* ---------- Send ---------- */
 FLOWS.send = [
   { name: 'First message in a new chat', lanes: ['you', 'ui', 'ls', 'api', 'db', 'ai'],
-    intro: 'You open "+ New chat" (or the app has no chats) and send <code>hello</code>. This is the longest path through the app, because the conversation row is created lazily.',
+    intro: 'You open "+ New chat" (or the app has no chats) and send <code>hello</code>. This is the longest path through the app: the conversation row is created lazily, and the guardrail and rate-limit steps run before anything is stored.',
     steps: [
-      { f: 'you', t: 'ui', label: 'press Enter', title: '1. You press Enter', text: '<code>ChatInput</code>\'s <code>onKeyDown</code> sees Enter without Shift, calls <code>preventDefault()</code> (so no newline is typed) and <code>submit()</code>. Blank text and "reply in progress" are both ignored. The text is trimmed, the box is cleared, and <code>onSend(text)</code> is called.', code: 'components/ChatInput.tsx: handleKeyDown → submit' },
-      { f: 'ui', t: 'ui', label: 'handleSend: loading', title: '2. handleSend starts', text: 'Clears any error and sets <code>loading=true</code>, so the input is disabled and Send turns into <b>Stop</b>. There is no <code>activeId</code>, so there\'s no conversation yet.', code: 'App.tsx: handleSend' },
-      { f: 'ui', t: 'api', label: 'POST /conversations', title: '3. Create the conversation', text: 'Created on the first message so that "+ New chat" never leaves empty rows behind. No body and no JSON header, so no preflight.', code: 'services/conversationService.ts: createConversation' },
+      { f: 'you', t: 'ui', label: 'press Enter', title: '1. You press Enter', text: '<code>ChatInput</code>\'s <code>onKeyDown</code> sees Enter without Shift, calls <code>preventDefault()</code> (so no newline is typed) and <code>submit()</code>. Blank text and "reply in progress" are ignored. The text is trimmed, the box is cleared, and <code>onSend(text)</code> is called.', code: 'components/ChatInput.tsx: handleKeyDown → submit' },
+      { f: 'ui', t: 'ui', label: 'handleSend: loading', title: '2. handleSend starts', text: 'Clears any error and sets <code>loading=true</code>, so the input is disabled and Send turns into <b>Stop</b>. There is no <code>activeId</code>, so the send also records that it created the chat. If a guardrail refuses the message, that empty chat is removed again.', code: 'App.tsx: handleSend (createdHere)' },
+      { f: 'ui', t: 'api', label: 'POST /conversations', title: '3. Create the conversation', text: 'Created on the first message so that "+ New chat" never leaves empty rows behind. No body and no JSON header, so no preflight. This route has its own rate limit (60 a minute per client by default).', code: 'services/conversationService.ts: createConversation' },
       { f: 'api', t: 'db', kind: 'db', label: 'INSERT conversation', title: '4. Row is inserted', text: '<code>get_db</code> opened a session for this request. The id is a random UUID, so it can\'t be guessed from a URL. The title starts as "New chat".', code: 'routers/conversations.py: create_conversation', data: "INSERT INTO conversations (id, title, created_at, updated_at)\nVALUES ('3f9c…', 'New chat', now, now)" },
       { f: 'api', t: 'ui', ret: true, label: '201 {id,title}', title: '5. Created', text: 'Status 201 with a <code>ConversationSummary</code>.', data: '{"id":"3f9c…","title":"New chat","updated_at":"…"}' },
-      { f: 'ui', t: 'ls', label: 'remember chat id', title: '6. UI adopts the new chat', text: '<code>setActiveId</code>, the sidebar gets the new row at the top, and the id goes into <code>localStorage</code> so a refresh reopens this chat.', code: 'App.tsx: handleSend (after createConversation)' },
-      { f: 'ui', t: 'ui', label: 'add user bubble', title: '7. The user bubble appears at once', text: 'The message gets a UUID (<code>userMsg.id</code>). That id is sent to the server as <code>client_message_id</code> and is what makes Retry safe. <code>requestReply</code> creates an <code>AbortController</code> (for Stop) and starts the stream.', code: 'App.tsx: handleSend, requestReply' },
-      { f: 'ui', t: 'api', label: 'OPTIONS, then POST', title: '8. The streaming request', text: 'A JSON POST triggers a CORS <b>preflight</b> (<code>OPTIONS</code>); the middleware approves, then the real <code>POST</code> follows. Notice the body: <b>only the new text</b>, not the history.', code: 'services/chatService.ts: streamMessage', data: 'POST /conversations/3f9c…/messages/stream\n{"content":"hello","client_message_id":"9b1e…"}' },
-      { f: 'api', t: 'api', label: 'Pydantic validates', title: '9. Validation gate', text: '<code>NewMessageRequest</code>: content is stripped, 1 to 4000 characters and not blank; <code>client_message_id</code> is 8 to 64 characters. Failure returns <b>422</b> and the handler never runs, so nothing is stored and no tokens are spent.', code: 'schemas.py: NewMessageRequest, MessageContent' },
-      { f: 'api', t: 'db', kind: 'db', label: 'save user message', title: '10. The user message is saved first', text: 'The route fetches the conversation (404 if unknown) and looks for an existing message with this <code>client_message_id</code>: none, so it\'s a new message. The title is still "New chat", so it becomes the first 50 characters (whitespace collapsed). The message is inserted and <b>committed before the AI is called</b>, so it survives even if the provider fails.', code: 'routers/conversations.py: send_message', data: "UPDATE conversations SET title='hello', updated_at=now\nINSERT INTO messages (conversation_id, role, content, client_id)\nVALUES ('3f9c…','user','hello','9b1e…')\nCOMMIT" },
-      { f: 'api', t: 'db', kind: 'db', label: 'SELECT last 20', title: '11. Context is loaded', text: 'The newest 20 messages by id, reversed into chronological order. The <b>server</b> decides what the model sees. See the "Context & memory" tab.', code: 'routers/conversations.py: _recent_context' },
-      { f: 'api', t: 'ai', label: 'completions(stream=True)', title: '12. Call the provider', text: '<code>open_reply_stream</code> builds the request: model from <code>OPENAI_MODEL</code>, the server-owned <b>system prompt</b>, then the context, with <code>max_completion_tokens=800</code>, a 30 s timeout and 2 retries. The call is made <i>now</i>, so bad key, rate limit and connection errors surface here, <b>before</b> any streaming, and can still be proper HTTP errors.', code: 'services/llm.py: open_reply_stream, get_chat_model', data: '[\n {"role":"system","content":"You are a helpful, concise assistant…"},\n {"role":"user","content":"hello"}\n]' },
-      { f: 'ai', t: 'api', ret: true, label: '200 + chunk stream', title: '13. Streaming begins', text: 'The provider accepts. The route returns <code>StreamingResponse(text/event-stream)</code>. From now on the HTTP status is <b>fixed at 200</b>, so a later failure can only be reported inside the stream.', code: 'streaming.py: sse_response' },
-      { f: 'api', t: 'ui', ret: true, label: 'data: {"delta":"Hi"}', title: '14. Text frames flow to the browser', text: 'For each provider chunk, <code>_text_pieces</code> skips chunks with no text, and <code>sse_events</code> sends <code>data: {"delta": "…"}</code> followed by a blank line. The text is JSON-encoded so newlines in a reply can\'t break the framing. The "Streaming" tab walks through this in detail.', code: 'llm.py: _text_pieces · streaming.py: sse_events' },
-      { f: 'ui', t: 'ui', label: 'bubble grows', title: '15. The reply grows on screen', text: 'The reader buffers bytes and splits on blank lines. The <b>first</b> delta creates the assistant bubble (typing dots disappear); later deltas append with a functional <code>setMessages(prev => …)</code> because many can arrive before React re-renders. Auto-scroll jumps (not smooth) while streaming.', code: 'App.tsx: requestReply onDelta · MessageList auto-scroll' },
-      { f: 'api', t: 'ui', ret: true, label: 'event: done', title: '16. The stream completes', text: 'The provider finishes. <code>sse_events</code> sends <code>event: done</code>. The client marks the stream finished (if it ends <i>without</i> this frame, the UI says "The response was interrupted").', code: 'streaming.py · services/chatService.ts: handleFrame' },
-      { f: 'api', t: 'db', kind: 'db', label: 'save assistant reply', title: '17. The reply is saved', text: 'The <code>finally</code> block closes the upstream stream, then calls <code>on_finish(full_text)</code>. <code>_save_assistant_message</code> opens a <b>new</b> session, inserts the assistant row, bumps <code>updated_at</code> and commits. This same block also runs on Stop, errors and disconnects. Blank text is never saved.', code: 'streaming.py: finally · routers/conversations.py: _save_assistant_message', data: "INSERT INTO messages (conversation_id, role, content)\nVALUES ('3f9c…','assistant','Hi! How can I help?')\nUPDATE conversations SET updated_at=now" },
-      { f: 'ui', t: 'api', label: 'GET /conversations', title: '18. Sidebar refresh', text: 'In <code>requestReply</code>\'s <code>finally</code>: <code>loading=false</code> (Send returns), then <code>refreshList()</code> so the sidebar shows the new title and the updated order.', code: 'App.tsx: requestReply → refreshList' }
+      { f: 'ui', t: 'ls', label: 'save active id', title: '6. UI adopts the new chat', text: '<code>setActiveId</code>, the sidebar gets the new row at the top, and the id goes into <code>localStorage</code> so a refresh reopens this chat.' },
+      { f: 'ui', t: 'ui', label: 'user bubble + userMsg.id', title: '7. The user bubble appears at once', text: 'The message gets a UUID (<code>userMsg.id</code>). That id is sent to the server as <code>client_message_id</code>, and it is what makes Retry safe. If the guard masks the text, the bubble is updated to the masked version when the server says so.', code: 'App.tsx: handleSend' },
+      { f: 'ui', t: 'api', label: 'POST …/messages/stream', title: '8. The streaming request', text: 'A JSON POST triggers a CORS <b>preflight</b>; the middleware approves, then the real POST follows. The body holds <b>only</b> the new text, the id and the documents switch. The per-client message rate limit (30 a minute by default) runs before the handler: over it, the answer is <code>429</code> with <code>Retry-After</code> and nothing is stored.', code: 'guardrails/hardening.py: rate_limit', data: '{"content":"hello","client_message_id":"msg-…","use_documents":false}' },
+      { f: 'api', t: 'api', label: 'NewMessageRequest', title: '9. Validation gate', text: 'Content is stripped, then must be 1 to 4000 characters and not blank; <code>client_message_id</code> must be 8 to 64 characters. Failure returns <code>422</code> and the route never runs.', code: 'schemas.py: NewMessageRequest' },
+      { f: 'api', t: 'api', kind: 'err', label: 'check_input(content)', title: '10. Guardrails check the text', text: 'Before anything is stored. A secret (API key, token, password, private key) is <b>refused</b>: <code>422</code> with <code>X-Guardrail: blocked</code>, and no row is written. Personal data (email, phone, card, ID, IBAN) is <b>masked</b>, and from here on the masked text is the message.', code: 'guardrails/checks.py: check_input', data: 'hello   →  hello            (nothing found, unchanged)\nemail jane@example.com  →  email [REDACTED:EMAIL]' },
+      { f: 'api', t: 'db', kind: 'db', label: 'UPDATE title + INSERT user', title: '11. The user message is saved first', text: 'The route fetches the conversation (404 if unknown) and looks for an existing message with this <code>client_message_id</code>: none, so it is new. The title and the stored message both use the <b>masked</b> text, and they are committed <b>before</b> the provider is called.', code: 'routers/conversations.py: send_message', data: "UPDATE conversations SET title = 'hello', updated_at = now  -- only if 'New chat'\nINSERT INTO messages (conversation_id, role, content, client_id)\nVALUES (<id>, 'user', 'hello', 'msg-…')" },
+      { f: 'api', t: 'db', label: 'SELECT last 20', title: '12. Context is loaded', text: 'The newest 20 messages by id, reversed into chronological order. The server decides what the model sees, and those rows are already masked. See the "Context & memory" tab.', code: 'routers/conversations.py: _recent_context' },
+      { f: 'api', t: 'api', label: 'retrieve (documents off here)', title: '13. Documents (only if "Use my documents" is on)', text: 'Skipped in this example because the switch is off. With it on, the newest question is first rewritten into a standalone search query (for searching only), then the top passages above the relevance threshold are retrieved. See the RAG guide.', code: 'services/rag.py: retrieve, services/rewrite.py' },
+      { f: 'api', t: 'ai', label: 'open_reply_stream(msgs)', title: '14. Start the chain and wait for the first token', text: '<code>ChatPromptTemplate | ChatOpenAI | StrOutputParser</code> starts streaming with the server-owned system prompt and the context, with <code>max_completion_tokens=800</code>, a 30 s timeout and 2 retries. <code>open_reply_stream</code> waits for the first piece of text before it returns, so a bad key, rate limit or unreachable provider is still an ordinary HTTP error.', code: 'services/llm.py: open_reply_stream, _chain', data: '[ {"role":"system", …}, {"role":"user","content":"hello"} ]' },
+      { f: 'ai', t: 'api', ret: true, label: 'first piece', title: '15. The first piece arrives', text: '<code>_text_pieces</code> skips chunks with no text (the role-only first chunk, usage chunks). The first piece is held back until the response is ready to start.' },
+      { f: 'api', t: 'ui', ret: true, label: 'event: guardrail (if masked)', title: '16. The response starts: status fixed at 200', text: 'The preface frames go first: <code>guardrail</code> if anything was masked (with the masked text), then <code>sources</code> if documents were searched. From here on the HTTP status is 200, so a later failure is reported as <code>event: error</code>.', data: 'event: guardrail\ndata: {"redacted":{"EMAIL":1},"content":"email [REDACTED:EMAIL] about the order"}' },
+      { f: 'api', t: 'api', label: 'guard_stream: mask', title: '17. The output guard masks each piece', text: '<code>guard_stream</code> wraps the text. It holds back the last 96 characters, so a secret split across two chunks is still matched, and it forwards only masked text.', code: 'guardrails/checks.py: guard_stream, StreamRedactor' },
+      { f: 'api', t: 'ui', ret: true, label: 'data: {"delta": "…"}', title: '18. Text frames flow to the browser', text: '<code>sse_events</code> sends each masked piece as <code>data: {"delta": "…"}</code> followed by a blank line. The first delta creates the assistant bubble.' },
+      { f: 'ui', t: 'ui', label: 'reader + append', title: '19. The reply grows on screen', text: 'The reader buffers bytes and splits on blank lines. The first delta creates the bubble (typing dots disappear); later deltas append with a functional update.' },
+      { f: 'api', t: 'ui', ret: true, label: 'event: done', title: '20. The stream completes', text: 'The provider finishes. The guard flushes its held-back tail (still masked), then <code>event: done</code> is sent. Without that frame the browser reports the reply as interrupted.' },
+      { f: 'api', t: 'db', kind: 'db', label: 'INSERT assistant (masked)', title: '21. The reply is saved', text: 'The <code>finally</code> block closes the upstream stream, then calls <code>on_finish(full_text)</code>. That text is the <b>masked</b> text. <code>_save_assistant_message</code> opens a <b>new</b> session to store it, together with the citation snapshot if documents were used.', code: 'streaming.py: sse_events finally · routers/conversations.py: _save_assistant_message' },
+      { f: 'ui', t: 'ui', label: 'loading=false, refresh', title: '22. Sidebar refresh', text: 'In <code>requestReply</code>\'s <code>finally</code>: <code>loading=false</code> (Send returns), then the sidebar is refreshed so the new title shows.', code: 'App.tsx: requestReply' }
     ] },
   { name: 'Follow-up message', lanes: ['you', 'ui', 'api', 'db', 'ai'],
-    intro: 'The chat already exists and has messages. You ask a follow-up. Compare with the first-message flow: no create step, and the context now contains earlier turns.',
+    intro: 'The second message in a chat. The guardrails and the rate limit run on it too, and with documents on, the follow-up question is rewritten before the search.',
     steps: [
-      { f: 'you', t: 'ui', label: 'press Enter', title: '1. You press Enter', text: 'Same input handling as before.', code: 'ChatInput.tsx' },
-      { f: 'ui', t: 'ui', label: 'handleSend + bubble', title: '2. handleSend (chat exists)', text: '<code>activeId</code> is set, so the create step is skipped. A new message UUID is generated and the user bubble is added.', code: 'App.tsx: handleSend' },
-      { f: 'ui', t: 'api', label: 'POST …/messages/stream', title: '3. Send only the new text', text: 'Body: <code>{content, client_message_id}</code>. No history goes over the wire.', data: '{"content":"What is my name?","client_message_id":"c47a…"}' },
-      { f: 'api', t: 'api', label: 'Pydantic validates', title: '4. Validation', text: 'Same rules as before; failure is a 422 and nothing is stored.' },
-      { f: 'api', t: 'db', kind: 'db', label: 'INSERT user message', title: '5. Save the message', text: 'The <code>client_message_id</code> isn\'t found, so it\'s new. The title is not "New chat" any more, so it\'s left alone. Insert, bump <code>updated_at</code>, commit.', code: 'routers/conversations.py: send_message' },
-      { f: 'api', t: 'db', kind: 'db', label: 'SELECT last 20', title: '6. This is how it "remembers"', text: 'The context now contains your earlier question and the earlier answer, plus the new question. The model never remembered anything: it was <b>shown</b> the earlier turns again.', data: 'user: My name is Sam\nassistant: Nice to meet you, Sam.\nuser: What is my name?' },
-      { f: 'api', t: 'ai', label: 'system + context', title: '7. Provider call', text: 'The system prompt plus the stored turns. With more than 20 stored messages, only the newest 20 are sent, and the model forgets the rest.' },
-      { f: 'ai', t: 'api', ret: true, label: 'streamed tokens', title: '8. Tokens come back', text: 'Same streaming path as before.' },
-      { f: 'api', t: 'ui', ret: true, label: 'SSE frames', title: '9. Frames to the browser', text: 'The assistant bubble appears and grows.' },
-      { f: 'api', t: 'db', kind: 'db', label: 'save assistant reply', title: '10. Save the reply', text: 'Saved when the stream ends (or is stopped or fails), in its own session.' },
-      { f: 'ui', t: 'api', label: 'GET /conversations', title: '11. Sidebar refresh', text: 'The chat moves to the top of the list because <code>updated_at</code> changed.' }
-    ] }
+      { f: 'you', t: 'ui', label: 'press Enter', title: '1. You press Enter', text: 'Same input handling as before.' },
+      { f: 'ui', t: 'ui', label: 'handleSend (chat exists)', title: '2. handleSend (chat exists)', text: '<code>activeId</code> is set, so the create step is skipped. A new message UUID is generated and the user bubble is added.' },
+      { f: 'ui', t: 'api', label: 'POST …/messages/stream', title: '3. Send only the new text', text: 'Body: <code>{content, client_message_id, use_documents}</code>. No history goes over the wire.' },
+      { f: 'api', t: 'api', label: 'rate limit + validation', title: '4. Rate limit, then validation', text: 'The per-client message limit runs first, then the same rules as before. A failure is a 422 or 429 and nothing is stored.' },
+      { f: 'api', t: 'api', kind: 'err', label: 'check_input', title: '5. Guardrails', text: 'A secret is refused (422 with <code>X-Guardrail</code>, nothing written). Personal data is masked before the insert.' },
+      { f: 'api', t: 'db', kind: 'db', label: 'INSERT user (masked)', title: '6. Save the message', text: 'The <code>client_message_id</code> isn\'t found, so the message is new. The title is not "New chat" any more, so it is left alone. The masked user message is inserted, <code>updated_at</code> is bumped, and the transaction commits.' },
+      { f: 'api', t: 'api', label: 'standalone question (documents on)', title: '7. Follow-up rewrite, only if documents are on', text: 'The newest question is rewritten into a standalone search query using the last few messages, costing one small model call. It is used <b>only for searching</b>: the model still receives your real message, and nothing rewritten is stored.', code: 'services/rewrite.py: standalone_question' },
+      { f: 'api', t: 'db', label: 'SELECT last 20 (masked)', title: '8. Context is loaded', text: 'The context contains your earlier question, the earlier answer, and the new question, all masked. This is how it "remembers": the model was <b>shown</b> the earlier turns. It never remembered anything itself.' },
+      { f: 'api', t: 'ai', label: 'chain.stream(...)', title: '9. Provider call', text: 'The chain runs with the system prompt and the stored turns, the same limits as before. With more than 20 stored messages, only the newest 20 are sent.' },
+      { f: 'api', t: 'ui', ret: true, label: 'guardrail / sources / deltas', title: '10. Frames to the browser', text: 'A <code>guardrail</code> frame if anything was masked, a <code>sources</code> frame if documents were searched, then the masked text as <code>delta</code> frames.' },
+      { f: 'api', t: 'db', kind: 'db', label: 'INSERT assistant (masked)', title: '11. Save the reply', text: 'Saved (masked) when the stream ends, is stopped, or fails, in its own session.' },
+      { f: 'ui', t: 'ui', label: 'refresh list', title: '12. Sidebar refresh', text: 'The chat moves to the top of the list because <code>updated_at</code> changed.' }
+    ] },
 ];
 
-/* ---------- Streaming ---------- */
 FLOWS.streaming = [
   { name: 'Token to pixel', lanes: ['ai', 'api', 'ui'],
-    intro: 'Follow a single piece of text, "Hel", from the provider\'s chunk to the character you see. Then the same path repeats for every chunk.',
+    intro: 'One piece of text, from the provider to the screen. The output guard sits in the middle and masks secrets and personal data before the browser sees them.',
     steps: [
-      { f: 'ai', t: 'api', label: 'chunk: "Hel"', title: '1. The provider sends a chunk', text: 'The provider streams its own SSE format. The OpenAI SDK parses each event into an object, so the code sees <code>chunk.choices[0].delta.content</code>.', data: 'data: {"choices":[{"delta":{"content":"Hel"}}]}' },
-      { f: 'api', t: 'api', label: '_text_pieces', title: '2. Pick out the text', text: 'Some chunks carry no text: the first one only sets the role, a final one may carry usage with <i>no</i> <code>choices</code>. <code>_text_pieces</code> skips those and yields only real text. It also remembers whether any text was produced, since a stream with none is an "empty response" error.', code: 'services/llm.py: _text_pieces' },
-      { f: 'api', t: 'api', label: 'sse_events', title: '3. Wrap it as an SSE frame', text: '<code>sse_events</code> appends the piece to a list (so it can be saved later) and yields <code>data: {"delta": "Hel"}</code> plus a blank line. JSON encoding protects newlines inside the text.', code: 'streaming.py: sse_events, sse()' },
-      { f: 'api', t: 'ui', ret: true, label: 'data: {delta:"Hel"}', title: '4. Sent immediately', text: 'FastAPI iterates this sync generator in a thread pool and flushes each frame. The response headers <code>Cache-Control: no-cache</code> and <code>X-Accel-Buffering: no</code> stop proxies from holding frames back, which would make the text appear all at once.', code: 'streaming.py: sse_response' },
-      { f: 'ui', t: 'ui', label: 'reader.read()', title: '5. The browser reads bytes', text: '<code>response.body.getReader()</code> returns arbitrary byte chunks. One read can hold half a frame, one frame, or three frames. That mismatch is why the next step exists.', code: 'services/chatService.ts: streamMessage' },
-      { f: 'ui', t: 'ui', label: 'buffer + split', title: '6. Buffer and split', text: 'Decode with <code>TextDecoder({stream:true})</code> (so multi-byte characters split across reads survive), add to the buffer, and cut off complete frames at each blank line (<code>\\n\\n</code>). Leftover text stays in the buffer for the next read. Try the playground below.', code: 'chatService.ts: while ((end = buffer.indexOf("\\n\\n")) !== -1)' },
-      { f: 'ui', t: 'ui', label: 'handleFrame', title: '7. Parse the frame', text: 'Read the optional <code>event:</code> line and the <code>data:</code> line, <code>JSON.parse</code> it. <code>error</code> throws an Error; <code>done</code> marks finished; anything else calls <code>onDelta(text)</code>.', code: 'chatService.ts: handleFrame' },
-      { f: 'ui', t: 'ui', label: 'setMessages', title: '8. State update, then paint', text: 'The first delta creates the assistant message (dots disappear). Later deltas use <code>setMessages(prev => prev.map(…))</code>, a functional update, because several deltas can arrive before React re-renders. <code>MessageList</code> then jumps to the bottom.', code: 'App.tsx: requestReply onDelta' },
-      { f: 'ai', t: 'api', label: 'chunks 2…n', title: '9. Repeat', text: 'Steps 1 to 8 repeat for every chunk, typically many per second.' },
-      { f: 'ai', t: 'api', label: 'finish + [DONE]', title: '10. Provider finishes', text: 'The stream ends normally. <code>_text_pieces</code>\'s <code>finally</code> closes the upstream stream, and if nothing was produced it raises "empty response".' },
-      { f: 'api', t: 'ui', ret: true, label: 'event: done', title: '11. The done frame', text: '<code>sse_events</code> sends <code>event: done</code>.', data: 'event: done\ndata: {}' },
-      { f: 'ui', t: 'ui', label: 'finished = true', title: '12. Stream complete', text: 'The read loop sees the stream end. Because <code>finished</code> is true, <code>streamMessage</code> resolves, and <code>requestReply</code>\'s finally clears <code>loading</code>. If the stream had ended <i>without</i> a done frame, it would throw "The response was interrupted. Please retry."', code: 'chatService.ts: after the read loop' }
-    ] }
+      { f: 'ai', t: 'api', label: 'chunk "Hel"', title: '1. The provider sends a chunk', text: 'The provider streams its own SSE format. The OpenAI SDK parses each event, and <code>ChatOpenAI</code> turns it into a message chunk.' },
+      { f: 'api', t: 'api', label: 'StrOutputParser + _text_pieces', title: '2. Pick out the text', text: '<code>StrOutputParser</code> yields plain strings. Some chunks carry no text (the role-only first one, a usage chunk), and <code>_text_pieces</code> skips them.', code: 'services/llm.py: _chain, _text_pieces' },
+      { f: 'api', t: 'api', label: 'guard_stream: hold back 96', title: '3. The output guard holds a tail', text: '<code>guard_stream</code> feeds the piece into <code>StreamRedactor</code>. Only text older than the last 96 characters is released, and it is masked. The tail stays in the buffer, so a secret cut across two chunks is still matched once it is complete.', code: 'guardrails/checks.py: StreamRedactor.feed' },
+      { f: 'api', t: 'api', label: 'SSE frame', title: '4. Wrap it as an SSE frame', text: '<code>sse_events</code> appends the masked piece to a list (so it can be saved later) and yields <code>data: {"delta": "Hel"}</code> plus a blank line. JSON encoding keeps newlines safe.' },
+      { f: 'api', t: 'ui', ret: true, label: 'flushed immediately', title: '5. Sent immediately', text: 'FastAPI iterates this generator in a thread pool and flushes each frame. The headers include <code>Cache-Control: no-cache</code> and <code>X-Accel-Buffering: no</code>, so proxies don\'t hold the stream back.' },
+      { f: 'ui', t: 'ui', label: 'read bytes', title: '6. The browser reads bytes', text: '<code>response.body.getReader()</code> returns arbitrary byte chunks. One read can hold half a frame, one frame, or three frames. That mismatch is why the next steps exist.' },
+      { f: 'ui', t: 'ui', label: 'buffer + split', title: '7. Buffer and split', text: 'Decode with <code>TextDecoder({stream:true})</code> (so multi-byte characters split across reads survive), add to the buffer, and cut off complete frames at each blank line.' },
+      { f: 'ui', t: 'ui', label: 'handleFrame', title: '8. Parse the frame', text: 'Read the optional <code>event:</code> line and the <code>data:</code> line, then <code>JSON.parse</code> it. <code>error</code> throws; <code>done</code> marks the stream finished; <code>guardrail</code> reports what was masked; <code>sources</code> arrives before the text.' },
+      { f: 'ui', t: 'ui', label: 'setMessages', title: '9. State update, then paint', text: 'The first delta creates the assistant message (dots disappear). Later deltas use <code>setMessages(prev => prev.map(…))</code>, a functional update, because several deltas can arrive before React re-renders.' },
+      { f: 'ai', t: 'api', ret: true, label: 'more chunks', title: '10. Repeat', text: 'Steps 1 to 9 repeat for every chunk, typically many per second.' },
+      { f: 'ai', t: 'api', label: 'stream ends', title: '11. Provider finishes', text: 'The stream ends. The guard flushes its held-back tail (masked). Then <code>_text_pieces</code> closes the upstream stream, and if nothing was produced it raises "empty response" as an in-stream error.' },
+      { f: 'api', t: 'ui', ret: true, label: 'event: done', title: '12. The done frame', text: '<code>sse_events</code> sends <code>event: done</code>.' },
+      { f: 'ui', t: 'ui', label: 'stream complete', title: '13. Stream complete', text: 'The read loop sees the end. Because <code>finished</code> is true, <code>streamMessage</code> resolves, and <code>requestReply</code>\'s <code>finally</code> clears the loading state.' }
+    ] },
 ];
 
-/* ---------- Stop ---------- */
 FLOWS.stop = [
   { name: 'Press Stop', lanes: ['you', 'ui', 'api', 'ai', 'db'],
-    intro: 'A long answer is streaming and you press <b>Stop</b>. Follow the cancellation all the way to the provider.',
+    intro: 'Stop is a chain reaction from the browser to the AI provider. Each layer closes the next one, so the provider stops generating.',
     steps: [
-      { f: 'you', t: 'ui', label: 'click Stop', title: '1. You click Stop', text: 'While <code>loading</code> is true, the Send button is replaced by Stop. It calls <code>abortRef.current?.abort()</code>.', code: 'ChatInput.tsx · App.tsx: handleStop' },
-      { f: 'ui', t: 'ui', label: 'AbortError (ignored)', title: '2. fetch rejects with AbortError', text: 'The pending <code>reader.read()</code> rejects with an <code>AbortError</code>. <code>requestReply</code> recognises it with <code>isAbortError</code> and does <b>not</b> show an error: Stop is a choice, not a failure. The partial bubble stays on screen.', code: 'App.tsx: requestReply catch · services/http.ts: isAbortError' },
+      { f: 'you', t: 'ui', label: 'click Stop', title: '1. You click Stop', text: 'While <code>loading</code> is true, the Send button is replaced by Stop. It calls <code>abortRef.current?.abort()</code>.' },
+      { f: 'ui', t: 'ui', label: 'AbortError', title: '2. fetch rejects with AbortError', text: 'The pending <code>reader.read()</code> rejects with an <code>AbortError</code>. <code>requestReply</code> recognises it with <code>isAbortError</code>, so Stop is not shown as an error.' },
       { f: 'ui', t: 'api', label: 'connection closed', title: '3. The browser closes the connection', text: 'Aborting the fetch closes the HTTP connection. The server finds out when it next tries to send, or through the server\'s disconnect detection.' },
-      { f: 'api', t: 'api', label: 'generator closed', title: '4. Starlette closes the generator', text: 'The response iterator is closed, which raises <code>GeneratorExit</code> inside <code>sse_events</code> at its current <code>yield</code>.', code: 'streaming.py: sse_events' },
-      { f: 'api', t: 'api', label: 'finally runs', title: '5. The finally block always runs', text: '<code>finally</code> does two things in order: <code>deltas.close()</code> (which closes the upstream stream), then <code>on_finish("".join(parts))</code> with everything streamed so far.', code: 'streaming.py: finally' },
-      { f: 'api', t: 'ai', kind: 'err', label: 'close upstream', title: '6. The provider connection is closed', text: '<code>_text_pieces</code>\'s <code>finally: stream.close()</code> closes the connection to the provider so no more tokens are generated for text nobody will read. A test pins this behavior.', code: 'llm.py: _text_pieces finally' },
-      { f: 'api', t: 'db', kind: 'db', label: 'save PARTIAL reply', title: '7. The partial answer is saved', text: 'The partial text goes in as an assistant message (new session). So after a refresh you see <b>exactly what you saw when you pressed Stop</b>. If no text had arrived yet, nothing is saved.', code: 'routers/conversations.py: _save_assistant_message', data: "INSERT INTO messages (role, content)\nVALUES ('assistant', 'Once upon a time, a small rob')" },
-      { f: 'ui', t: 'api', label: 'GET /conversations', title: '8. UI settles', text: '<code>loading=false</code>, the Send button returns, the sidebar refreshes. You can send the next message immediately.', code: 'App.tsx: requestReply finally' }
+      { f: 'api', t: 'api', label: 'GeneratorExit', title: '4. Starlette closes the generator', text: 'The response iterator is closed, which raises <code>GeneratorExit</code> inside <code>sse_events</code> at its current <code>yield</code>. The output guard is the generator <code>sse_events</code> reads from, so it is closed too.', code: 'streaming.py: sse_events' },
+      { f: 'api', t: 'api', label: 'finally: close + save', title: '5. The finally block always runs', text: '<code>sse_events</code>\'s <code>finally</code> first closes the guarded stream, then calls <code>on_finish</code> with the text that was actually sent (already masked).' },
+      { f: 'api', t: 'ai', kind: 'err', label: 'close the provider stream', title: '6. The provider connection is closed', text: '<code>guard_stream</code>\'s <code>finally</code> closes the text stream, which closes the chain\'s stream and its HTTP connection to the provider. No more tokens are generated for text nobody will read. The held-back tail is dropped: it was never sent, so nothing unmasked leaves the server.', code: 'guardrails/checks.py: guard_stream · services/llm.py: _text_pieces' },
+      { f: 'api', t: 'db', kind: 'db', label: 'INSERT partial (masked)', title: '7. The partial answer is saved', text: 'The masked partial text is stored in a new session. After a refresh you see <b>exactly what you saw</b> when you pressed Stop, already masked. If no text had arrived, nothing is saved.' },
+      { f: 'ui', t: 'ui', label: 'loading=false', title: '8. UI settles', text: '<code>loading=false</code>, the Send button returns, and the sidebar refreshes. You can send the next message immediately.' }
     ] },
   { name: 'Close the tab', lanes: ['you', 'api', 'ai', 'db'],
-    intro: 'You close the tab or lose your connection while an answer streams. There\'s no UI code involved, but the server still cleans up.',
+    intro: 'No Stop button and no JavaScript involved. The server cleans up the same way.',
     steps: [
-      { f: 'you', t: 'api', kind: 'err', label: 'tab closed / offline', title: '1. The client disappears', text: 'The browser closes the connection (or the network drops). No Stop button involved, and no JavaScript runs.' },
-      { f: 'api', t: 'api', label: 'generator closed', title: '2. Same server-side cleanup', text: 'The server detects the disconnect and closes the response generator, exactly like in the Stop flow. <code>finally</code> runs.', code: 'streaming.py: sse_events' },
+      { f: 'you', t: 'api', label: 'tab closed', title: '1. The client disappears', text: 'The browser closes the connection (or the network drops). No JavaScript runs.' },
+      { f: 'api', t: 'api', label: 'generator closed', title: '2. Same server-side cleanup', text: 'The server detects the disconnect and closes the response generator, exactly as in the Stop flow. The <code>finally</code> blocks run.' },
       { f: 'api', t: 'ai', kind: 'err', label: 'close upstream', title: '3. Stop paying for tokens', text: 'The provider stream is closed, so generation stops.' },
-      { f: 'api', t: 'db', kind: 'db', label: 'save partial reply', title: '4. Partial reply saved', text: 'Whatever had streamed so far is stored. When you reopen the app, the chat loads with that partial answer as the last message.' }
-    ] }
+      { f: 'api', t: 'db', kind: 'db', label: 'save partial (masked)', title: '4. Partial reply saved', text: 'Whatever had streamed so far (masked) is stored. When you reopen the app, the chat loads with that partial answer as the last message.' }
+    ] },
 ];
 
-/* ---------- Failures ---------- */
 FLOWS.fail = [
   { name: 'Provider fails before first token', lanes: ['you', 'ui', 'api', 'db', 'ai'],
-    intro: 'The provider rejects the request (bad key, rate limit, timeout, or unreachable) before streaming starts. Because no body has been sent yet, the server can still answer with a <b>real HTTP error</b>.',
+    intro: 'The provider is down, the key is wrong, or the rate limit is hit. Because the first token is read before the response starts, the failure is a real HTTP status.',
     steps: [
-      { f: 'ui', t: 'api', label: 'POST …/messages/stream', title: '1. The request arrives', text: 'It passes validation like any other message.', data: '{"content":"hello","client_message_id":"9b1e…"}' },
-      { f: 'api', t: 'db', kind: 'db', label: 'save user message', title: '2. The user message is saved first', text: 'Committed before the provider call. So a failure here never loses what you typed, and it\'s what makes the retry below safe.' },
-      { f: 'api', t: 'ai', kind: 'err', label: 'request fails', title: '3. The provider call fails', text: 'The SDK raises an exception: <code>APITimeoutError</code>, <code>APIConnectionError</code>, <code>RateLimitError</code>, <code>AuthenticationError</code>, or another <code>APIStatusError</code>.', code: 'services/llm.py: open_reply_stream' },
-      { f: 'api', t: 'api', kind: 'err', label: '_translate()', title: '4. Map to a safe error', text: 'Order matters because timeout is a subclass of connection error: timeout → 504, connection → 502, rate limit → 429, auth → 500 ("not configured correctly", logged), anything else → 502. It raises <code>ChatServiceError(status, safe_message)</code>. The provider\'s own message is <b>never</b> forwarded, and message text is never logged.', code: 'llm.py: _translate' },
-      { f: 'api', t: 'ui', kind: 'err', ret: true, label: 'HTTP 504 / 502 / 429 / 500', title: '5. A real HTTP error', text: 'The route turns it into <code>HTTPException(status, detail)</code>. Since no stream has started, the status code is genuine.', data: '504 {"detail":"The AI took too long to respond. Please try again."}' },
-      { f: 'ui', t: 'ui', kind: 'err', label: 'error box + Retry', title: '6. The UI shows the error', text: '<code>fetchOrThrow</code> sees <code>!response.ok</code>, <code>extractError</code> reads <code>detail</code>, and <code>requestReply</code>\'s catch sets the error. No assistant bubble is created. <code>loading=false</code>. The Retry button shows because a last user message exists.', code: 'services/http.ts: fetchOrThrow, extractError' },
-      { f: 'you', t: 'ui', label: 'click Retry', title: '7. You click Retry', text: '<code>handleRetry</code> finds the last user message and re-sends it with its <b>original id</b>.', code: 'App.tsx: handleRetry' },
-      { f: 'api', t: 'db', kind: 'db', label: 'id found → no duplicate', title: '8. The server recognises it', text: 'The lookup by <code>client_message_id</code> <b>finds</b> the stored message. So it does not insert a second copy; it deletes anything stored <i>after</i> it (nothing here) and carries on to generate the answer.', code: 'routers/conversations.py: existing is not None', data: "DELETE FROM messages\nWHERE conversation_id=? AND id > <id of the user message>" },
-      { f: 'api', t: 'ai', label: 'request again', title: '9. Generate again', text: 'This time it succeeds, and the normal streaming path takes over. The result: <b>exactly one</b> user message followed by one answer.' }
+      { f: 'you', t: 'api', label: 'send', title: '1. The request arrives', text: 'It passes the rate limit, validation and the guardrails like any other message.' },
+      { f: 'api', t: 'db', kind: 'db', label: 'user message committed', title: '2. The user message is saved first', text: 'Committed before the provider call. A failure never loses what you typed, and that is what makes the retry below safe.' },
+      { f: 'api', t: 'ai', kind: 'err', label: 'request fails', title: '3. The provider call fails', text: '<code>ChatOpenAI</code> passes the SDK exception through unchanged: <code>APITimeoutError</code>, <code>APIConnectionError</code>, <code>RateLimitError</code>, <code>AuthenticationError</code>, or another <code>OpenAIError</code>. It is raised while the first piece is read.' },
+      { f: 'api', t: 'api', kind: 'err', label: '_translate()', title: '4. Map to a safe error', text: 'Order matters because timeout is a subclass of connection error: timeout → 504, connection → 502, rate limit → 429, auth → 500 ("not configured correctly", logged without the key). Upstream text is never returned.', code: 'services/llm.py: _translate' },
+      { f: 'api', t: 'ui', kind: 'err', ret: true, label: 'HTTP error + detail', title: '5. A real HTTP error', text: 'Because no token was read, <code>open_reply_stream</code> raises <code>ChatServiceError</code> and the route raises <code>HTTPException(status, detail)</code>. The status is genuine, not 200.' },
+      { f: 'ui', t: 'ui', kind: 'err', label: 'error box', title: '6. The UI shows the error', text: '<code>fetchOrThrow</code> sees <code>!response.ok</code>, <code>extractError</code> reads <code>detail</code>, and <code>requestReply</code>\'s catch shows it.' },
+      { f: 'ui', t: 'api', label: 'Retry', title: '7. You click Retry', text: '<code>handleRetry</code> finds the last user message and re-sends it with its <b>original id</b>.' },
+      { f: 'api', t: 'db', kind: 'db', label: 'lookup by client id', title: '8. The server recognises it', text: 'The lookup by <code>client_message_id</code> <b>finds</b> the stored message, so no second copy is inserted. Anything stored after it is deleted (here, nothing).' },
+      { f: 'api', t: 'ui', ret: true, label: 'streamed answer', title: '9. Generate again', text: 'This time it succeeds, and the normal streaming path takes over. The result: <b>exactly one</b> user message followed by one answer.' }
     ] },
   { name: 'Connection drops mid-stream', lanes: ['ui', 'api', 'db', 'ai'],
-    intro: 'The answer was streaming, then the provider connection died. The 200 status was already sent, so this failure travels <i>inside</i> the stream.',
+    intro: 'The answer has started, so the status can no longer change. The failure travels inside the stream, and the partial text is kept.',
     steps: [
-      { f: 'api', t: 'ui', ret: true, label: 'data: {delta} …', title: '1. Some text has already arrived', text: 'The user sees part of an answer, for example "Partial answer".' },
-      { f: 'ai', t: 'api', kind: 'err', label: 'connection lost', title: '2. The upstream connection breaks', text: 'The provider stops, or the network fails, in the middle of the stream.' },
-      { f: 'api', t: 'api', kind: 'err', label: '_text_pieces catches', title: '3. Caught inside the generator', text: 'The SDK raises an <code>OpenAIError</code> while iterating. <code>_text_pieces</code> translates it via <code>_translate</code> into a <code>ChatServiceError</code>.', code: 'llm.py: _text_pieces except OpenAIError' },
-      { f: 'api', t: 'ui', kind: 'err', ret: true, label: 'event: error', title: '4. Reported as an in-stream event', text: 'The status is already 200 and can\'t change, so <code>sse_events</code> sends <code>event: error</code> with a safe <code>detail</code>.', data: 'event: error\ndata: {"detail": "Could not reach the AI service. Please try again."}', code: 'streaming.py: except ChatServiceError' },
-      { f: 'api', t: 'db', kind: 'db', label: 'save partial reply', title: '5. The partial text is saved', text: '<code>finally</code> runs: close upstream, then <code>on_finish</code> stores "Partial answer" as the assistant message.' },
-      { f: 'ui', t: 'ui', kind: 'err', label: 'keep partial + error', title: '6. UI keeps the partial text', text: '<code>handleFrame</code> throws the error; <code>requestReply</code> sets it. The partial bubble stays, and the error box with Retry appears.', code: 'chatService.ts: handleFrame · App.tsx: requestReply' },
-      { f: 'ui', t: 'api', label: 'Retry (same id)', title: '7. Retry', text: '<code>handleRetry</code> first cuts the local list back to the user message (dropping the partial bubble), then re-sends the same <code>client_message_id</code>.', code: 'App.tsx: handleRetry' },
-      { f: 'api', t: 'db', kind: 'db', label: 'DELETE partial answer', title: '8. The server replaces the partial', text: 'The id is found, so everything after that user message, which is the partial answer, is deleted. A new answer is generated and saved. The database ends with one user message and one answer.', data: "DELETE FROM messages WHERE conversation_id=? AND id > <user msg id>\n(then a new assistant row is inserted at the end of the stream)" }
+      { f: 'ui', t: 'ui', label: 'partial text visible', title: '1. Some text has already arrived', text: 'The user sees part of an answer, for example "Partial answer".' },
+      { f: 'ai', t: 'api', kind: 'err', label: 'connection breaks', title: '2. The upstream connection breaks', text: 'The provider stops, or the network fails, in the middle of the stream.' },
+      { f: 'api', t: 'api', kind: 'err', label: '_translate + flush tail', title: '3. Caught inside the generator', text: 'The SDK raises an <code>OpenAIError</code> while iterating. <code>_text_pieces</code> translates it into a <code>ChatServiceError</code>. The output guard releases its held-back tail first (masked), so the partial reply is complete.', code: 'services/llm.py: _text_pieces · guardrails/checks.py: guard_stream' },
+      { f: 'api', t: 'ui', kind: 'err', ret: true, label: 'event: error {detail}', title: '4. Reported as an in-stream event', text: 'The status is already 200 and cannot change, so <code>sse_events</code> sends <code>event: error</code> with a safe <code>detail</code>.' },
+      { f: 'api', t: 'db', kind: 'db', label: 'save partial (masked)', title: '5. The partial text is saved', text: '<code>finally</code> runs: close the stream, then <code>on_finish</code> stores the masked partial text as the assistant message.' },
+      { f: 'ui', t: 'ui', kind: 'err', label: 'error box + Retry', title: '6. UI keeps the partial text', text: '<code>handleFrame</code> throws the error; <code>requestReply</code> sets it. The partial bubble stays, and the error box with Retry appears.' },
+      { f: 'ui', t: 'api', label: 'Retry (same id)', title: '7. Retry', text: '<code>handleRetry</code> first cuts the local list back to the user message (dropping the partial bubble), then re-sends the same <code>client_message_id</code>.' },
+      { f: 'api', t: 'db', kind: 'db', label: 'replace the partial', title: '8. The server replaces the partial', text: 'The id is found, so everything after that user message, which is the partial answer, is deleted. A new answer is generated and saved. The database ends with one user message and one answer.' }
     ] },
   { name: 'Server unreachable', lanes: ['you', 'ui', 'api', 'db'],
     intro: 'The backend is down (or a CORS rule blocks the call). The request never reaches the server, so the server has never seen this message.',
@@ -676,6 +723,64 @@ FLOWS.fail = [
 ];
 
 /* ---------- Conversations ---------- */
+FLOWS.guard = [
+  { name: 'Secret in a message (refused)', lanes: ['you', 'ui', 'api', 'db'],
+    intro: 'You paste "here is my key sk-proj-…". A secret is refused (the default). Nothing is stored and the model is never called.',
+    steps: [
+      { f: 'you', t: 'ui', label: 'send', title: '1. You send it', text: 'The bubble appears at once, and a chat is created if this is the first message.' },
+      { f: 'ui', t: 'api', label: 'POST …/messages/stream', title: '2. The request', text: 'The same request as any message.' },
+      { f: 'api', t: 'api', kind: 'err', label: 'check_input → secret', title: '3. The guard finds an API key', text: 'The check for known key prefixes (<code>sk-</code>, <code>gsk_</code>, <code>AKIA</code>, <code>ghp_</code>, …) matches. In the default <code>block</code> mode, the guard raises <code>GuardrailBlocked</code>.', code: 'guardrails/checks.py: check_input' },
+      { f: 'api', t: 'db', kind: 'db', ret: true, label: '(nothing written)', title: '4. Nothing is stored', text: 'The check runs before the first insert of the message. No message row and no title change. The model is never called.' },
+      { f: 'api', t: 'ui', kind: 'err', ret: true, label: '422 + X-Guardrail: blocked', title: '5. A refusal that never repeats the secret', text: 'A fixed sentence: it looks like a secret and was not sent or saved. The matched text is never echoed back, and the header lets the UI tell this apart from other errors.', data: '{"detail":"That looks like it contains a secret … Remove it and try again."}' },
+      { f: 'ui', t: 'api', label: 'DELETE empty chat', title: '6. The UI cleans up', text: 'The bubble is removed, your text goes back into the box to edit, and a toast gives the reason. If this send created the chat, that empty chat is deleted (cleanup finishes before the list is refreshed, so it does not reappear). No Retry is offered, because the same text would be refused again.', code: 'App.tsx: handleSend (onBlocked)' }
+    ] },
+  { name: 'Personal data in a message (masked)', lanes: ['you', 'ui', 'api', 'db', 'ai'],
+    intro: 'You send "Please email me at jane@example.com". Personal data is <b>masked</b>, not refused, so the conversation continues.',
+    steps: [
+      { f: 'you', t: 'ui', label: 'send', title: '1. You send it', text: 'The bubble appears with the text as typed.' },
+      { f: 'api', t: 'api', kind: 'err', label: 'check_input → EMAIL', title: '2. The guard masks it', text: 'No secret found. An email is found and replaced: <code>Please email me at [REDACTED:EMAIL]</code>. The original is not kept anywhere.', code: 'guardrails/checks.py: check_input' },
+      { f: 'api', t: 'db', kind: 'db', label: 'INSERT masked', title: '3. Stored masked', text: 'The message row and the conversation title use the masked text.' },
+      { f: 'api', t: 'ui', ret: true, label: 'event: guardrail', title: '4. The first frame tells the UI', text: 'It lists what was masked and carries the masked text, sent before any sources or reply text.', data: '{"redacted":{"EMAIL":1},"content":"Please email me at [REDACTED:EMAIL]"}' },
+      { f: 'ui', t: 'ui', label: 'bubble + toast', title: '5. You see what was really sent', text: 'The bubble now shows the masked text, and a notice reads "Masked 1 email address before sending." After a refresh it is still masked, because that is what was stored.', code: 'App.tsx: onGuardrail' },
+      { f: 'api', t: 'ai', label: 'masked history', title: '6. The model never sees the address', text: 'The model receives the masked text. A test checks that the address is absent from what the provider receives.' }
+    ] },
+  { name: 'The model repeats a secret (masked on the way out)', lanes: ['ai', 'api', 'ui', 'db'],
+    intro: 'A document, or a guess, makes the model write an API key. The output guard masks it while the text streams.',
+    steps: [
+      { f: 'ai', t: 'api', label: 'chunk: "…key is sk-proj-"', title: '1. The first part arrives', text: 'The key is cut in the middle by the chunk boundary.' },
+      { f: 'api', t: 'api', label: 'hold back 96 chars', title: '2. Held back, not forwarded', text: '<code>StreamRedactor</code> keeps the last 96 characters in its buffer. Nothing is sent yet.', code: 'guardrails/checks.py: StreamRedactor' },
+      { f: 'ai', t: 'api', label: 'chunk: "abcdefgh…1234"', title: '3. The rest arrives', text: 'The buffer now holds the whole key. Matching runs on the buffer, so the key is found even though no single chunk contained all of it.' },
+      { f: 'api', t: 'ui', ret: true, label: 'data: "…[REDACTED:API_KEY]…"', title: '4. Only masked text goes out', text: 'If a match straddles the cut, the cut moves past its end first. The browser never receives the key.' },
+      { f: 'ai', t: 'api', ret: true, label: 'end of stream', title: '5. Flush and save', text: 'The remaining buffer is masked and sent, then <code>event: done</code>. The saver receives the same masked text, so the database holds the masked reply too, and a refresh shows the same thing.', code: 'streaming.py: sse_events' },
+      { f: 'api', t: 'db', kind: 'db', label: 'INSERT assistant (masked)', title: '6. What is stored', text: 'The masked reply. The original key is never stored.' }
+    ] },
+  { name: 'Upload: secret refused, personal data masked before indexing', lanes: ['you', 'ui', 'api', 'db'],
+    intro: 'Documents follow the same rules as messages, applied to the extracted text before chunking and embedding.',
+    steps: [
+      { f: 'you', t: 'ui', label: 'choose a file', title: '1. Upload', text: 'The browser checks the type and size first, as before.' },
+      { f: 'ui', t: 'api', label: 'POST /documents', title: '2. The request', text: 'Subject to the upload rate limit (10 a minute by default) and the request-size cap.' },
+      { f: 'api', t: 'api', label: 'extract text', title: '3. Text is extracted', text: 'UTF-8 for text and markdown, <code>pypdf</code> for PDF, all in memory. Nothing is written to disk.' },
+      { f: 'api', t: 'api', kind: 'err', label: 'check_document(text)', title: '4. The document guard', text: 'Same rules as a message. A secret refuses the whole file (<code>422</code>, <code>X-Guardrail</code>). Personal data is masked. Instruction-like phrases only add a warning.', code: 'guardrails/checks.py: check_document' },
+      { f: 'api', t: 'api', label: 'chunk + embed the MASKED text', title: '5. Masked before indexing', text: 'Chunking and embedding only ever see the masked text, so the address is in no vector either.' },
+      { f: 'api', t: 'db', kind: 'db', label: 'INSERT document + chunks', title: '6. Stored masked', text: 'The chunks, and therefore any future citation, contain <code>[REDACTED:EMAIL]</code>.' },
+      { f: 'api', t: 'ui', ret: true, label: '201 {…, redacted, warnings}', title: '7. The response says what happened', text: 'Only the upload response carries <code>redacted</code> and <code>warnings</code>. The panel shows "masked 1 email address before indexing." A secret file shows the refusal under the Upload button instead.' }
+    ] },
+  { name: 'Too many requests (rate limit)', lanes: ['ui', 'api'],
+    intro: 'The 31st message in a minute from one address (default limit 30).',
+    steps: [
+      { f: 'ui', t: 'api', label: 'POST …/messages/stream', title: '1. A request', text: 'The rate-limit dependency runs before the handler.' },
+      { f: 'api', t: 'api', label: 'window of 60 s', title: '2. Count the client\'s recent requests', text: 'Old timestamps are dropped. The client is the connection address, or the first <code>X-Forwarded-For</code> entry only when <code>TRUST_PROXY=true</code>.', code: 'guardrails/hardening.py: rate_limit' },
+      { f: 'api', t: 'ui', kind: 'err', ret: true, label: '429 + Retry-After', title: '3. Refused, with a hint', text: '"Too many requests. Please wait a moment and retry." and how many seconds to wait. Nothing is stored and the model is not called.' }
+    ] },
+  { name: 'Oversized request (413)', lanes: ['ui', 'api'],
+    intro: 'A 50 MB upload, or a body sent in chunks with no Content-Length.',
+    steps: [
+      { f: 'ui', t: 'api', label: 'Content-Length: 50000000', title: '1. Declared too large', text: 'Over the cap (default 2.5 MB): rejected with <code>413</code> before the body is read.' },
+      { f: 'ui', t: 'api', label: 'chunked, no length', title: '2. Not declared', text: 'The middleware counts bytes as they arrive and stops reading once the cap is passed.' },
+      { f: 'api', t: 'ui', kind: 'err', ret: true, label: '413 {"detail":"The request is too large."}', title: '3. Cut off', text: 'The middleware raises a <code>BaseException</code> subclass, because FastAPI\'s body parsing would otherwise turn an ordinary exception into a 400.', code: 'guardrails/hardening.py: BodyLimitMiddleware' }
+    ] }
+];
+
 FLOWS.conv = [
   { name: 'Switch chats', lanes: ['you', 'ui', 'ls', 'api', 'db'],
     intro: 'Click another conversation in the sidebar.',
@@ -932,8 +1037,8 @@ Object.keys(FLOWS).forEach(mountFlowSection);
 (() => {
   const W = [
     { n: '1. Create chat', when: 'On your <b>first message</b> in a new chat (lazy), via POST /conversations.', sql: "INSERT INTO conversations (id, title, created_at, updated_at)\nVALUES ('<uuid>', 'New chat', now, now)", code: 'routers/conversations.py: create_conversation', refresh: 'The empty chat exists, but the next step happens right away, so you never see an empty one.' },
-    { n: '2. Save user message', when: 'When the stream request arrives and passes validation: <b>before</b> the provider is called.', sql: "UPDATE conversations SET title = <first 50 chars>, updated_at = now   -- only if title is 'New chat'\nINSERT INTO messages (conversation_id, role, content, client_id)\nVALUES (<id>, 'user', <text>, <client_message_id>)\nCOMMIT", code: 'routers/conversations.py: send_message', refresh: 'Even if the provider fails, a refresh shows your message with no answer under it.' },
-    { n: '3. Save assistant reply', when: 'In the stream\'s <code>finally</code>: on completion, on error, on Stop, and on disconnect. Skipped if no text arrived.', sql: "INSERT INTO messages (conversation_id, role, content)\nVALUES (<id>, 'assistant', <all text streamed so far>)\nUPDATE conversations SET updated_at = now\nCOMMIT   -- in a NEW session", code: 'streaming.py: sse_events → routers/conversations.py: _save_assistant_message', refresh: 'A refresh shows exactly the text that had streamed, complete or partial.' },
+    { n: '2. Save user message', when: 'When the stream request arrives, passes validation <b>and the guardrail check</b>: <b>before</b> the provider is called. A message with a secret is refused and nothing is written; personal data is written in masked form.', sql: "UPDATE conversations SET title = <first 50 chars>, updated_at = now   -- only if title is 'New chat'\nINSERT INTO messages (conversation_id, role, content, client_id)\nVALUES (<id>, 'user', <text>, <client_message_id>)\nCOMMIT", code: 'routers/conversations.py: send_message', refresh: 'Even if the provider fails, a refresh shows your message with no answer under it.' },
+    { n: '3. Save assistant reply', when: 'In the stream\'s <code>finally</code>: on completion, on error, on Stop, and on disconnect. Skipped if no text arrived.', sql: "INSERT INTO messages (conversation_id, role, content)\nVALUES (<id>, 'assistant', <all text streamed so far, already masked>)\nUPDATE conversations SET updated_at = now\nCOMMIT   -- in a NEW session", code: 'streaming.py: sse_events → routers/conversations.py: _save_assistant_message', refresh: 'A refresh shows exactly the text that had streamed, complete or partial.' },
     { n: '4. Retry replaces', when: 'When a message id that already exists is sent again.', sql: "-- found: SELECT ... WHERE client_id = <same id>\nDELETE FROM messages\nWHERE conversation_id = <id> AND id > <id of that user message>", code: 'routers/conversations.py: existing is not None', refresh: 'The partial or failed answer disappears; a new one is saved at the end of the next stream.' },
     { n: '5. Delete chat', when: 'Clear Chat or the × button, after a confirmation.', sql: "DELETE FROM messages WHERE conversation_id = <id>   -- ORM cascade / FK cascade\nDELETE FROM conversations WHERE id = <id>", code: 'routers/conversations.py: delete_conversation', refresh: 'The chat is gone for good, including after a server restart.' }
   ];
@@ -976,6 +1081,7 @@ Object.keys(FLOWS).forEach(mountFlowSection);
     { from: 'streaming', to: 'idle', ev: 'Stop', edge: 'done', note: 'AbortError ignored. The partial text stays on screen and is saved by the server, so a refresh shows the same text.' },
     { from: 'streaming', to: 'error', ev: 'Error event / connection cut', edge: 'serr', note: 'The partial text stays; the error box and Retry appear. The server saved the partial text too.' },
     { from: 'error', to: 'waiting', ev: 'Retry', edge: 'retry', note: 'The same message id is re-sent. The server replaces any partial answer instead of duplicating the message.' },
+    { from: 'waiting', to: 'idle', ev: 'Guardrail refusal (a secret)', edge: 'stop', note: 'The server refused the text (422 with X-Guardrail). The bubble is removed, the text goes back into the box, a toast gives the reason, and an empty chat created by this send is deleted. No Retry: the same text would be refused again.' },
     { from: 'error', to: 'waiting', ev: 'Send a new message', edge: 'retry', note: 'The error is cleared and a normal new send begins.' }
   ];
   const BW = 150, BH = 60;
@@ -1017,11 +1123,15 @@ Object.keys(FLOWS).forEach(mountFlowSection);
     { n: '2 CORS', stops: 'Other websites\' JavaScript reading your API from a visitor\'s browser. Only localhost:5173 and 127.0.0.1:5173 are allowed; methods GET, POST, DELETE.', where: 'main.py: CORSMiddleware', bypass: 'Not a barrier for curl or servers: CORS is enforced only by browsers. Never treat it as authentication.' },
     { n: '3 Pydantic validation', stops: 'Bad roles, blank or over-long content, bad ids, wrong shapes. Invalid input returns 422 and the route never runs, so nothing is stored and no tokens are spent.', where: 'schemas.py: MessageContent, NewMessageRequest, ChatRequest', bypass: 'No. This is the real boundary for input size and shape.' },
     { n: '4 Server-owned context', stops: 'Forged "assistant" turns, injected "system" messages, oversized history. The client sends only the new text; the server loads context from its own rows and prepends the system prompt.', where: 'routers/conversations.py: _recent_context · llm.py: SYSTEM_PROMPT', bypass: 'No. (A user can still try to talk the model into ignoring instructions: that is prompt injection, which a system prompt alone does not fully prevent.)' },
-    { n: '5 Cost caps', stops: 'Runaway cost: last 20 messages only, max 800 reply tokens, 30 s timeout, 2 retries, Stop closes the upstream stream.', where: 'schemas.py: MAX_HISTORY_MESSAGES · llm.py: MAX_OUTPUT_TOKENS, REQUEST_TIMEOUT_SECONDS', bypass: 'No, but there is no per-user rate limit yet.' },
+    { n: '5 Cost caps', stops: 'Runaway cost: last 20 messages only, max 800 reply tokens, 30 s timeout, 2 retries, Stop closes the upstream stream.', where: 'schemas.py: MAX_HISTORY_MESSAGES · llm.py: MAX_OUTPUT_TOKENS, REQUEST_TIMEOUT_SECONDS', bypass: 'Partly. Rate limits are per client address and per process; see the Guardrails section.' },
     { n: '6 Safe errors', stops: 'Leaking internals. Provider exceptions become fixed, friendly messages; upstream text and stack traces never reach the client.', where: 'llm.py: _translate', bypass: 'No.' },
-    { n: '7 Log hygiene', stops: 'Secrets and private conversations in log files. Only exception types and status codes are logged, never message text or keys.', where: 'llm.py, routers/conversations.py (logger usage)', bypass: 'No.' },
+    { n: '7 Log hygiene', stops: 'Secrets and private conversations in log files. Only exception types and status codes are logged, never message text or keys. A log filter also masks any secret or personal data that reaches a log line.', where: 'llm.py, routers/conversations.py (logger usage)', bypass: 'No.' },
     { n: '8 Secrets', stops: 'Key leaks. The key lives only in backend/.env (gitignored); the frontend never has it. Vite exposes only VITE_ variables, so secrets must never use that prefix.', where: '.gitignore · database/llm env reads', bypass: 'Only by human error. If a key is ever pasted anywhere, revoke it.' },
-    { n: '9 Authentication', missing: true, stops: 'NOT BUILT. Anyone who can reach the API can list, read and delete every conversation. Conversation ids are unguessable UUIDs, but that is not access control.', where: 'Would go in front of every /conversations route', bypass: 'Required before deployment: user accounts, ownership checks on every conversation query, per-user rate limits.' }
+    { n: '9 Input guardrails', stops: 'Secrets (keys, tokens, passwords, private keys) are refused before anything is stored or sent; personal data is masked first. Covers messages, the stateless endpoints and uploads.', where: 'guardrails/checks.py: check_input, check_document · routers/conversations.py, routers/documents.py', bypass: 'Pattern-based: it misses names, addresses and unfamiliar secret formats, and a determined user can evade it. It reduces accidents; it is not data-loss prevention.' },
+    { n: '10 Output guardrails', stops: 'Secrets and personal data the model repeats are masked while streaming, so the browser and the database never receive them.', where: 'guardrails/checks.py: StreamRedactor, guard_stream', bypass: 'Same pattern limits. Text is held back up to 96 characters so a chunk boundary cannot split a secret past the check.' },
+    { n: '11 Rate limits & size cap', stops: 'Floods and oversized bodies: 429 per client over the limit; 413 for bodies over 2.5 MB, including when no length is declared.', where: 'guardrails/hardening.py: rate_limit, BodyLimitMiddleware', bypass: 'Per address, in memory, per process. Behind a proxy, set TRUST_PROXY so visitors are told apart; never set it when the API is reachable directly, because the header can be forged.' },
+    { n: '12 Security headers', stops: 'Browsers sniffing content types, framing the app, leaking referrers, and API responses being cached or treated as pages.', where: 'guardrails/hardening.py: SecurityHeadersMiddleware', bypass: 'Headers only instruct browsers. A script or curl ignores them.' },
+    { n: '13 Authentication', missing: true, stops: 'NOT BUILT. Anyone who can reach the API can list, read and delete every conversation. Conversation ids are unguessable UUIDs, but that is not access control.', where: 'Would go in front of every /conversations route', bypass: 'Required before deployment: user accounts, ownership checks on every conversation query, per-user rate limits.' }
   ];
   const pills = document.getElementById('layerPills'), box = document.getElementById('layerDetail');
   function pick(i) {
@@ -1039,16 +1149,21 @@ Object.keys(FLOWS).forEach(mountFlowSection);
 (() => {
   const R = [
     { g: 'Stateless', m: 'GET', p: '/health', req: '-', val: '-', db: 'none', ok: '200 {"status":"ok"}', err: '-' },
-    { g: 'Stateless', m: 'POST', p: '/chat', req: '{messages:[{role,content}]} (whole history)', val: 'roles user/assistant; 1 to 20 messages; content 1 to 4000; last message from user', db: 'none', ok: '200 {"reply"}', err: '422, 429, 500, 502, 504' },
-    { g: 'Stateless', m: 'POST', p: '/chat/stream', req: 'same as /chat', val: 'same as /chat', db: 'none', ok: '200 SSE: delta…, done', err: 'before stream: 422/429/500/502/504 · after: event: error' },
+    { g: 'Stateless', m: 'GET', p: '/info', req: '-', val: '-', db: 'none', ok: '200 model, provider host, guardrail policy, limits (never a key)', err: '-' },
+    { g: 'Stateless', m: 'POST', p: '/chat', req: '{messages:[{role,content}]} (whole history)', val: 'roles user/assistant; 1 to 20 messages; content 1 to 4000; last message from user; every user turn passes the guardrails', db: 'none', ok: '200 {"reply"} (reply masked)', err: '422 (incl. guardrail refusal), 429, 500, 502, 504' },
+    { g: 'Stateless', m: 'POST', p: '/chat/stream', req: 'same as /chat', val: 'same as /chat', db: 'none', ok: '200 SSE: delta… (masked), done', err: 'before stream: 422/429/500/502/504 · after: event: error' },
     { g: 'Conversations', m: 'GET', p: '/conversations', req: '-', val: '-', db: 'SELECT newest 100', ok: '200 [summary…]', err: '-' },
-    { g: 'Conversations', m: 'POST', p: '/conversations', req: '(no body)', val: '-', db: 'INSERT conversation', ok: '201 summary', err: '-' },
+    { g: 'Conversations', m: 'POST', p: '/conversations', req: '(no body)', val: '-', db: 'INSERT conversation', ok: '201 summary', err: '429' },
     { g: 'Conversations', m: 'GET', p: '/conversations/{id}', req: '-', val: '-', db: 'SELECT chat + messages', ok: '200 {…, messages}', err: '404' },
     { g: 'Conversations', m: 'DELETE', p: '/conversations/{id}', req: '-', val: '-', db: 'DELETE chat (cascade)', ok: '204', err: '404' },
-    { g: 'Conversations', m: 'POST', p: '/conversations/{id}/messages/stream', req: '{content, client_message_id}', val: 'content 1 to 4000, not blank; id 8 to 64 chars', db: 'INSERT user (or replace on retry); SELECT last 20; INSERT assistant at end', ok: '200 SSE: delta…, done', err: 'before stream: 404/422/429/500/502/504 · after: event: error' }
+    { g: 'Conversations', m: 'POST', p: '/conversations/{id}/messages/stream', req: '{content, client_message_id, use_documents}', val: 'content 1 to 4000, not blank; id 8 to 64 chars; a secret is refused; personal data is masked', db: 'INSERT user (masked), or replace on retry; SELECT last 20; INSERT assistant (masked) at end', ok: '200 SSE: guardrail (if masked), sources (if documents), delta… (masked), done', err: 'before stream: 404/422/429/500/502/504 · after: event: error' },
+    { g: 'Documents', m: 'GET', p: '/documents', req: '-', val: '-', db: 'SELECT all (newest first)', ok: '200 [summary…]', err: '-' },
+    { g: 'Documents', m: 'POST', p: '/documents', req: 'multipart: file', val: '.txt .md .pdf; up to 2 MB; up to 50 documents; up to 400 chunks; a secret is refused; personal data masked before chunking', db: 'INSERT document + masked chunks + vectors', ok: '201 {…, redacted, warnings}', err: '413 415 409 422 429 503' },
+    { g: 'Documents', m: 'DELETE', p: '/documents/{id}', req: '-', val: '-', db: 'DELETE document (cascade)', ok: '204', err: '404' },
+    { g: 'Documents', m: 'POST', p: '/documents/search', req: '{query, top_k}', val: 'query 1 to 500 characters, not blank; top_k 1 to 10', db: 'SELECT chunk vectors (read only)', ok: '200 [results…]', err: '422 429 503' }
   ];
   const pills = document.getElementById('epPills'), table = document.getElementById('epTable');
-  const groups = ['All', 'Conversations', 'Stateless'];
+  const groups = ['All', 'Conversations', 'Documents', 'Stateless'];
   function pick(g) {
     [...pills.children].forEach((b) => b.classList.toggle('active', b.textContent === g));
     table.innerHTML = '<tr><th>Method</th><th>Path</th><th>Request body</th><th>Validation</th><th>Database effect</th><th>Success</th><th>Errors</th></tr>' +
