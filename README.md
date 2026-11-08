@@ -447,4 +447,5 @@ See [`docs/DEPLOY.md`](docs/DEPLOY.md): the demo on GitHub Pages (safe to make p
 - `docs/AI-Chat-RAG-Flows-Guide.html`: the same style of guide for documents and RAG (upload and indexing, search and thresholds, answering with citations), with live labs for chunking, scoring, and prompt building
 - `docs/AI-Chat-LangChain-Guide.html`: the LangChain integration (Phase 15): the chain, retriever and query rewriting as step-through flows, a live rewrite lab, how it is tested, and what was deliberately not adopted
 - `docs/AI-Chat-Guardrails-Guide.html`: the guardrails (Phase 16): what is checked where, step-through flows, a live detector lab, streaming redaction, abuse limits, and the limits of the approach
+- `docs/AI-Chat-Tech-and-Flow-Guide.html` / `.pdf`: the technology stack and every end-to-end flow (startup, send with RAG, upload and indexing, stop and retry, delete, demo, delivery), with sequence diagrams. Source and regeneration steps in `docs/guide-src/`
 - `docs/AI-Chat-Interview-Guide.pdf`: all 63 interview questions (Phases 1 to 16), with answers and diagrams
