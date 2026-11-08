@@ -122,3 +122,10 @@ cd frontend && npm test
 - Manual, full stack: send a message containing a fake key such as `sk-proj-abcdefghijklmnopqrstuvwx1234`. It should be refused, vanish from the thread, and come back in the box. Send an email address: the bubble should show `[REDACTED:EMAIL]`, a notice should appear, and a refresh should still show the masked text.
 - Manual: upload a `.txt` containing a key (refused) and one containing an email (accepted, with a "masked 1 email address" note). Ask about it and confirm the answer never shows the address.
 - Manual: send 31 messages in a minute; the 31st should say "Too many requests" with a retry delay.
+
+## Vector store checks (Phase 17)
+- Automated, default: `cd backend && pytest -q`. Runs the suite on SQLite, plus `tests/test_vectorstore.py` (Qdrant in-memory).
+- Automated, on Qdrant: `TEST_VECTOR_STORE=qdrant pytest -q`. Runs the same 187 pre-existing tests against an in-memory Qdrant. Both must pass.
+- Not automated, server mode: start Qdrant with `docker compose up -d qdrant` (needs a Docker daemon and a `QDRANT_API_KEY`), set `VECTOR_STORE=qdrant` and `QDRANT_URL`, then run the smoke test in `docs/DEPLOY.md`. This is the one path the test run does not cover.
+- Reindex tool: `python tools/reindex_qdrant.py --prune` prints how many documents were indexed and how many stale entries were removed.
+

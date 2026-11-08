@@ -20,6 +20,7 @@ from guardrails.checks import GuardrailBlocked, check_input, guard_stream
 from guardrails.hardening import rate_limit
 from services import rag
 from services.embeddings import EmbeddingError
+from services.errors import VectorStoreError
 from services.llm import ChatServiceError, open_reply_stream
 from streaming import sse, sse_response
 
@@ -172,7 +173,7 @@ def send_message(
     if body.use_documents:
         try:
             passages = rag.retrieve(db, context)
-        except EmbeddingError:
+        except (EmbeddingError, VectorStoreError):
             raise HTTPException(
                 status_code=503,
                 detail="Document search is unavailable. Turn off 'Use my documents' to chat without it.",

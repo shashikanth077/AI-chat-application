@@ -170,6 +170,7 @@
 <section class="panel" id="overview" data-title="Overview">
   <h2>RAG in this app: documents in, cited answers out</h2>
   <p class="lead">Phases 12 and 13 let the chat answer from <b>your own files</b>. This guide follows each step end to end, and lets you run the real chunking, matching and prompt-building logic in your browser. It continues <code>AI-Chat-Flows-Guide.html</code> (Phases 10 and 11: streaming, saved chats).</p>
+  <div class="note"><b>Updated in Phase 17.</b> Document search now has two stores behind one switch: <code>VECTOR_STORE=sqlite</code> (the brute-force search described below, the default) or <code>VECTOR_STORE=qdrant</code>, where the same chunk vectors live in a Qdrant collection and the search is a LangChain retriever over it. SQLite stays the source of truth for documents and citations; a failed upload or delete is recovered by the rules in the README, and <code>tools/reindex_qdrant.py --prune</code> cleans up. The steps below are otherwise unchanged.</div>
   <div class="note"><b>Updated in Phase 15.</b> The model call now goes through a LangChain chain (<code>services/llm.py</code>) and document search through a retriever; the frames, errors and storage described here are unchanged. See <code>AI-Chat-LangChain-Guide.html</code> for the new pieces. Where a step below says "SDK", the OpenAI SDK is still what runs underneath.</div>
 
   <div class="card">

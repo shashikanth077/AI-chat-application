@@ -107,6 +107,7 @@ def info() -> InfoResponse:
         provider=urlparse(base_url).hostname,  # the host only: never the key, never the full URL
         embedding_backend=backend,
         embedding_model="hashing" if backend == "hashing" else (os.getenv("EMBEDDING_MODEL") or DEFAULT_EMBEDDING_MODEL),
+        vector_store=os.getenv("VECTOR_STORE", "sqlite").strip().lower() or "sqlite",
         limits=InfoLimits(
             max_message_chars=MAX_MESSAGE_CHARS,
             history_messages=MAX_HISTORY_MESSAGES,

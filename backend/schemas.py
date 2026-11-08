@@ -150,5 +150,6 @@ class InfoResponse(BaseModel):
     provider: str | None
     embedding_backend: str
     embedding_model: str
+    vector_store: str  # sqlite | qdrant
     limits: InfoLimits
     guardrails: "InfoGuardrails"

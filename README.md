@@ -32,7 +32,8 @@
 - **Safe markdown**: syntax-highlighted code, tables and lists. Raw HTML, images and `javascript:` links are rendered inert (covered by tests)
 - **Saved conversations** (SQLite), searchable, grouped by date, restored after a refresh; **export** any chat to Markdown
 - **Polish**: light/dark themes without a flash, collapsible sidebar, keyboard shortcuts, toasts, accessible modal and menus, responsive down to phones
-- **Engineering**: Pydantic validation, mapped HTTP errors, secrets never logged or sent to the browser, 359 automated tests and CI
+- **Vector database**: document vectors can live in **Qdrant**, an open-source vector database, instead of SQLite; one switch, same answers, same citations
+- **Engineering**: Pydantic validation, mapped HTTP errors, secrets never logged or sent to the browser, 206 backend tests (run on both vector stores), 172 frontend tests and CI
 
 ## Quick start (full stack)
 ```bash
@@ -90,6 +91,33 @@ chain = ChatPromptTemplate.from_messages([("system", "{system}"), MessagesPlaceh
 - **Tests** fake the OpenAI SDK at its lowest layer, so a real `ChatOpenAI` and the real chain run. Rewrite quality with a real model is **not measured**; the tests prove the plumbing and fallbacks. Pin exact dependency versions before deploying, since LangChain's API moves.
 
 The demo build is unaffected: its simulated assistant and client-side retrieval are not LangChain.
+
+## Vector database: Qdrant
+Document search needs a store for the chunk vectors. Two backends, one switch (`VECTOR_STORE`):
+
+| | `sqlite` (default) | `qdrant` |
+|---|---|---|
+| Where vectors live | the `chunks` table, compared by brute force | a Qdrant collection per embedding model |
+| Extra service | none | Qdrant (`docker compose up -d qdrant`), or embedded on disk (`QDRANT_PATH`) |
+| Good for | a few thousand chunks, development, tests | larger libraries, a separate, scalable index, approximate search later |
+| Source of truth | SQLite | SQLite (documents, chunk text, citations); Qdrant holds only vectors and their payload |
+
+```bash
+docker compose up -d qdrant                  # repo root; set QDRANT_API_KEY first (see docker-compose.yml)
+# backend/.env
+VECTOR_STORE=qdrant
+QDRANT_URL=http://localhost:6333
+QDRANT_API_KEY=your-long-random-key
+python tools/reindex_qdrant.py --prune       # backend/: copy stored vectors into Qdrant, remove stale entries
+```
+
+How the two stay consistent. SQLite is the truth. An upload writes its points **before** the database commit and removes them if the commit fails. A delete commits in SQLite **first**, then removes the points; if that removal fails the delete still succeeds, the leftover points are hidden from every answer, and `--prune` removes them. Each embedding model gets its own collection, so vectors from different models are never compared.
+
+LangChain's part: the store is `langchain_qdrant.QdrantVectorStore`, and both backends are LangChain **retrievers** (`BaseRetriever`) that return `Document`s with filename, position and score in their metadata. The answer pipeline calls one `get_retriever()` and does not know which store is behind it. Vectors are computed once and reused: a reindex copies the stored vectors and never re-embeds.
+
+What is tested, and what is not. The full test suite runs on both backends (`TEST_VECTOR_STORE=qdrant pytest` uses an in-memory Qdrant). Qdrant's *server* mode is not exercised by the test run: the build environment for this project had no Docker daemon, so `docker-compose.yml` is validated as YAML only. Run one smoke test against your server (upload a document, ask a question, then `--prune`) before relying on it.
+
+Limits. Search is still exact per collection with no hybrid keyword matching; the default embedder is the offline hashing one in tests only. Qdrant has no per-user access control: see `docs/DEPLOY.md` for keys, network binding and TLS.
 
 ## Guardrails and security
 Guardrails sit around the model, end to end. They are pattern-based checks, so they are a **safety net, not a guarantee** (see the limits below).
@@ -160,7 +188,8 @@ VITE_DEMO=true VITE_BASE=/ai-chat-application/ npm run build   # for GitHub Page
 | Routes | `backend/main.py`, `backend/routers/` | HTTP endpoints, CORS, error mapping, `/info` |
 | Streaming | `backend/streaming.py` | SSE framing; saves the reply however the stream ends |
 | Persistence | `backend/database.py`, `backend/models.py` | SQLAlchemy; `conversations`, `messages`, `message_sources`, `documents`, `chunks` |
-| RAG | `backend/services/` | `chunking`, `embeddings`, `retrieval`, `rag` (threshold, prompt building, tag escaping) |
+| Vector index | `backend/services/vectorstore.py`, `qdrant_store.py`, `retriever.py` | Backend switch (`sqlite` or `qdrant`), Qdrant collections and payloads, LangChain retrievers |
+| RAG | `backend/services/` | `chunking`, `embeddings`, `retrieval`, `rag` (threshold, prompt building, tag escaping), `rewrite` |
 | Schemas | `backend/schemas.py` | Pydantic request/response models and limits |
 | AI service | `backend/services/llm.py` | LangChain chain (prompt, `ChatOpenAI`, parser), streaming, error classification |
 | Retriever, rewrite | `backend/services/retriever.py`, `backend/services/rewrite.py` | The SQLite store as a LangChain retriever; follow-up questions rewritten before searching |
@@ -176,6 +205,7 @@ AI-chat-application/
 │   ├── routers/  services/  tests/  tools/
 │   └── requirements.txt  requirements-dev.txt  .env.example
 ├── .github/workflows/ ci.yml (tests) and deploy-demo.yml (GitHub Pages)
+├── docker-compose.yml  Qdrant server for the vector store
 └── docs/              screenshots, DEPLOY.md, testing guide, learning guides, interview questions
 ```
 
@@ -342,7 +372,7 @@ source .venv/bin/activate
 pip install -r requirements-dev.txt
 pytest -q
 ```
-The 187 tests cover validation, error mapping, safe error messages, CORS, streaming (including mid-stream failure and cancellation), conversation storage, idempotent retry, cascade deletes, document upload (text, markdown, PDF, limits, filename safety), chunking, embedding failures, similarity ranking, RAG prompt building (relevance threshold, prompt-injection escaping, citations surviving retries and document deletion), and that invalid input never reaches the model. Database tests use a throwaway SQLite file per test. See `docs/testing.md` for the manual end-to-end checklist.
+The 206 tests cover validation, error mapping, safe error messages, CORS, streaming (including mid-stream failure and cancellation), conversation storage, idempotent retry, cascade deletes, document upload (text, markdown, PDF, limits, filename safety), chunking, embedding failures, similarity ranking, RAG prompt building (relevance threshold, prompt-injection escaping, citations surviving retries and document deletion), and that invalid input never reaches the model. Database tests use a throwaway SQLite file per test. See `docs/testing.md` for the manual end-to-end checklist.
 
 ### Frontend
 ```bash
@@ -377,6 +407,7 @@ NODE_PATH=$(npm root -g) node frontend/e2e/smoke.cjs http://localhost:4173/ai-ch
 | Upload limits | `backend/routers/documents.py` | 2 MB per file, 50 documents, 400 chunks per document |
 | Chunking | `backend/services/chunking.py` | 800 characters per chunk, 100 overlap |
 | Embeddings | `EMBEDDING_BACKEND`, `EMBEDDING_MODEL` in `.env` | `fastembed`, `BAAI/bge-small-en-v1.5` |
+| Vector store | `VECTOR_STORE`, `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_PATH` in `.env` | `sqlite`; the Qdrant settings apply when `qdrant` is chosen |
 | Relevance threshold | `RAG_MIN_SCORE` in `.env` | `0.5` for the default model (a starting point: tune it, see below) |
 | Passages per answer | `backend/services/rag.py` (`MAX_PASSAGES`) | 4 |
 | Max reply tokens | `backend/services/llm.py` | 800 |
@@ -408,7 +439,7 @@ See [`docs/DEPLOY.md`](docs/DEPLOY.md): the demo on GitHub Pages (safe to make p
 
 ## Roadmap
 - Authentication and per-user conversations and documents (required before any deployment)
-- Better retrieval: rewrite follow-up questions into standalone ones before searching, hybrid keyword + vector search, re-ranking, an indexed vector store for large libraries
+- Better retrieval: hybrid keyword + vector search and re-ranking (follow-up rewriting and an open-source vector database are done)
 
 ## Learning guide
 - `docs/AI-Chat-Learning-Guide.html`: interactive walkthrough of how the app was built (Phases 1 to 9 concepts)

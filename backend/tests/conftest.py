@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -18,6 +19,13 @@ def _fresh_rate_limits():
     from guardrails.hardening import reset_rate_limits
 
     reset_rate_limits()
+
+
+@pytest.fixture(autouse=True)
+def _no_vector_store_from_the_developer_env(monkeypatch: pytest.MonkeyPatch):
+    """backend/.env is loaded on import, so a developer's Qdrant settings must not leak into tests."""
+    for name in ("VECTOR_STORE", "QDRANT_URL", "QDRANT_PATH", "QDRANT_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture
@@ -66,9 +74,19 @@ def db(tmp_path, monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture
 def rag(db, monkeypatch: pytest.MonkeyPatch):
-    """Database plus the offline hashing embedder: no model download, deterministic."""
-    from services import embeddings
+    """Database plus the offline hashing embedder: no model download, deterministic.
+
+    TEST_VECTOR_STORE=qdrant runs the same suite against an in-memory Qdrant
+    (qdrant-client's local mode) instead of the SQLite brute-force search.
+    """
+    from services import embeddings, qdrant_store
 
     monkeypatch.setenv("EMBEDDING_BACKEND", "hashing")
     monkeypatch.setattr(embeddings, "_embedder", None)
-    return db
+    if os.getenv("TEST_VECTOR_STORE", "sqlite") == "qdrant":
+        from qdrant_client import QdrantClient
+
+        qdrant_store.set_client(QdrantClient(location=":memory:"))
+        monkeypatch.setenv("VECTOR_STORE", "qdrant")
+    yield db
+    qdrant_store.set_client(None)

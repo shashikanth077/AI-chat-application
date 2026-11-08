@@ -1,4 +1,5 @@
 import logging
+from uuid import uuid4
 
 import numpy as np
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
@@ -10,10 +11,11 @@ from guardrails.checks import GuardrailBlocked, check_document
 from guardrails.hardening import rate_limit
 from models import Chunk, Document
 from schemas import DocumentSummary, SearchRequest, SearchResult
-from services import retrieval
+from services import vectorstore
 from services.chunking import chunk_text
 from services.documents import DocumentError, clean_filename, extension_of, extract_text, ALLOWED_EXTENSIONS
 from services.embeddings import EmbeddingError, get_embedder
+from services.errors import VectorStoreError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -43,6 +45,8 @@ def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db))
     if db.scalar(select(func.count()).select_from(Document)) >= MAX_DOCUMENTS:
         raise HTTPException(status_code=409, detail="Document limit reached. Delete one first.")
 
+    # Chosen here, not by the database, so the index entries and the row share one id.
+    document_id = str(uuid4())
     try:
         text = extract_text(filename, data)
         # Secrets are refused; personal data is masked BEFORE chunking, embedding and storing,
@@ -53,15 +57,20 @@ def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db))
             raise DocumentError(422, f"The document is too long (over {MAX_CHUNKS_PER_DOCUMENT} chunks). Split it.")
         embedder = get_embedder()
         vectors = embedder.embed_documents(chunks)
+        # Index first; the SQLite commit below makes it visible. A failure here leaves nothing behind.
+        vectorstore.add_document(document_id, filename, chunks, vectors, embedder.name)
     except GuardrailBlocked as exc:
         raise HTTPException(status_code=422, detail=exc.message, headers={"X-Guardrail": "blocked"})
     except DocumentError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message)
     except EmbeddingError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+    except VectorStoreError as exc:
+        raise HTTPException(status_code=503, detail=exc.message)
 
-    # Only now is anything stored, so a failed upload leaves no half-indexed document.
+    # Only now is the row stored, so a failed upload leaves no half-indexed document.
     document = Document(
+        id=document_id,
         filename=filename,
         size_bytes=len(data),
         chunk_count=len(chunks),
@@ -72,7 +81,16 @@ def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db))
         for i, (chunk, vector) in enumerate(zip(chunks, vectors))
     ]
     db.add(document)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        # The row did not commit, so the index entries it just wrote must not stay searchable.
+        logger.exception("Could not save the document; removing its index entries")
+        try:
+            vectorstore.delete_document(document_id, embedder.name)
+        except VectorStoreError:
+            pass  # the search ignores entries with no stored document, and --prune removes them
+        raise
     # Not stored: only the response says what was masked or flagged.
     document.redacted = checked.redacted  # type: ignore[attr-defined]
     document.warnings = checked.warnings  # type: ignore[attr-defined]
@@ -84,14 +102,20 @@ def delete_document(document_id: str, db: Session = Depends(get_db)) -> Response
     document = db.get(Document, document_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found.")
+    embedder_name = document.embedding_model
     db.delete(document)  # its chunks go with it (cascade)
     db.commit()
+    try:
+        vectorstore.delete_document(document_id, embedder_name)
+    except VectorStoreError:
+        # Deleted for the user already. Stale points are hidden from search and removed by --prune.
+        logger.warning("Document %s removed from the database; its index entries need pruning", document_id)
     return Response(status_code=204)
 
 
 @router.post("/search", dependencies=[Depends(rate_limit("search", "RATE_LIMIT_SEARCH_PER_MINUTE", 30))], response_model=list[SearchResult])
 def search_documents(body: SearchRequest, db: Session = Depends(get_db)) -> list[SearchResult]:
     try:
-        return retrieval.search(db, body.query, body.top_k)
-    except EmbeddingError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+        return vectorstore.search(db, body.query, body.top_k)
+    except (EmbeddingError, VectorStoreError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc) if isinstance(exc, EmbeddingError) else exc.message)

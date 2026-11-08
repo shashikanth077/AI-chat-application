@@ -76,6 +76,8 @@ export function AboutDialog({ info, demo, onClose }: Props) {
             <dd>{info.provider ?? 'unknown'}</dd>
             <dt>Embeddings</dt>
             <dd>{info.embedding_model}</dd>
+            <dt>Vector store</dt>
+            <dd>{info.vector_store === 'qdrant' ? 'Qdrant' : 'SQLite (brute force)'}</dd>
             <dt>Context</dt>
             <dd>last {info.limits.history_messages} messages</dd>
             <dt>Guardrails</dt>
