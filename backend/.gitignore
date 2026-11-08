@@ -19,3 +19,4 @@ dist/
 # local database
 *.db
 .model_cache/
+qdrant_data/

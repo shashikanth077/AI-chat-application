@@ -8,5 +8,7 @@ python-dotenv>=1.0
 sqlalchemy>=2.0
 fastembed>=0.4
 numpy>=1.26
+qdrant-client>=1.20
+langchain-qdrant>=1.1
 pypdf>=4.0
 python-multipart>=0.0.9

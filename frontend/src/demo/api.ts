@@ -88,6 +88,7 @@ export function demoInfo(): Info {
     provider: 'in your browser',
     embedding_backend: 'hashing',
     embedding_model: 'hashing:384',
+    vector_store: 'sqlite',
     limits: LIMITS,
     guardrails: { enabled: true, secrets: 'block', pii: 'redact' },
   };

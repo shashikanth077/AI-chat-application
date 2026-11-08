@@ -54,6 +54,24 @@ and run the API with `uvicorn main:app --host 0.0.0.0 --port $PORT` behind HTTPS
 persistent disk. These start commands follow the standard pattern for such hosts but have **not been tested on a specific
 platform** here.
 
+## Running Qdrant for the vector store
+
+Document vectors can live in Qdrant instead of SQLite. Run it beside the API, not on the public internet.
+
+1. Set a key, then start it from the repository root:
+   ```bash
+   echo "QDRANT_API_KEY=$(openssl rand -hex 32)" >> .env       # a .env next to docker-compose.yml, or export it
+   QDRANT_VERSION=<the version you tested> docker compose up -d qdrant
+   ```
+   The compose file binds Qdrant to `127.0.0.1` only. Without `QDRANT_API_KEY` set, Compose refuses to start the service, because an unauthenticated Qdrant lets anyone read and delete every vector.
+2. In `backend/.env` set `VECTOR_STORE=qdrant`, `QDRANT_URL=http://localhost:6333` and the same `QDRANT_API_KEY`.
+3. Copy the existing documents across (no re-embedding): `cd backend && python tools/reindex_qdrant.py --prune`.
+4. Smoke test: upload a document, ask a question with "Use my documents" on, and check the citation. Then delete the document and confirm it no longer answers.
+
+On a PaaS host, Qdrant needs a persistent disk for `/qdrant/storage`, and it must not be reachable from the internet without the key: use the platform's private networking, or put it behind your reverse proxy with TLS. Set `QDRANT_URL` to the private address.
+
+Rules to keep: never run Qdrant without a key outside your own machine; back up both `chat.db` and the Qdrant volume (the database is the truth, so Qdrant can always be rebuilt with `reindex_qdrant.py`); and after changing the embedding model, run the reindex again, because the model's vectors go in their own collection.
+
 ## Hardening the frontend host
 The API sends its own security headers, but the static site is served by your host. Where it lets you set headers, add
 `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and a Content-Security-Policy that allows only your own scripts and

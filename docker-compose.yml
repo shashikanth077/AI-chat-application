@@ -1,0 +1,27 @@
+# Qdrant, the open-source vector database, for document search.
+#
+#   docker compose up -d qdrant          # starts Qdrant on 127.0.0.1:6333 (REST) and 6334 (gRPC)
+#   # then in backend/.env:
+#   #   VECTOR_STORE=qdrant
+#   #   QDRANT_URL=http://localhost:6333
+#   #   QDRANT_API_KEY=<a long random string>   (strongly recommended; see the note below)
+#
+# The chat application itself runs as documented in README.md (not in this file).
+# Pin QDRANT_VERSION to a server version you have tested. The default tracks the latest
+# release, which is convenient but can change under you.
+services:
+  qdrant:
+    image: qdrant/qdrant:${QDRANT_VERSION:-latest}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6333:6333"   # REST, used by qdrant-client
+      - "127.0.0.1:6334:6334"   # gRPC (optional)
+    environment:
+      # Read from the shell or a .env file next to this one. Without a key, anyone who can reach the port can read and delete the vectors.
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?set QDRANT_API_KEY in the environment or a .env file}
+      QDRANT__SERVICE__ENABLE_TLS: "false"  # terminate TLS at your reverse proxy if you expose it
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+volumes:
+  qdrant_data:

@@ -6,7 +6,7 @@ import { AboutDialog } from './AboutDialog';
 
 const info: Info = {
   app: 'AI Chat', version: '1.0.0', demo: false, model: 'llama-3.3-70b', provider: 'api.groq.com',
-  embedding_backend: 'fastembed', embedding_model: 'BAAI/bge-small-en-v1.5',
+  embedding_backend: 'fastembed', embedding_model: 'BAAI/bge-small-en-v1.5', vector_store: 'qdrant',
   guardrails: { enabled: true, secrets: 'block', pii: 'redact' },
   limits: { max_message_chars: 4000, history_messages: 20, max_upload_bytes: 2_000_000, max_documents: 50 },
 };

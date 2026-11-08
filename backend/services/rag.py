@@ -8,7 +8,8 @@ from models import Document
 from schemas import ChatMessage, SearchResult
 from services import rewrite
 from services.embeddings import get_embedder
-from services.retriever import SqliteRetriever, to_search_result
+from services import vectorstore
+from services.retriever import to_search_result
 
 MAX_PASSAGES = 4  # how many chunks to put in front of the model
 
@@ -48,7 +49,7 @@ def retrieve(db: Session, history: list[ChatMessage]) -> list[SearchResult] | No
         return None
     # The model still sees the user's real message; only the search uses the standalone one.
     query = rewrite.standalone_question(history)
-    retriever = SqliteRetriever(db=db, top_k=MAX_PASSAGES, min_score=min_score())
+    retriever = vectorstore.get_retriever(db, top_k=MAX_PASSAGES, min_score=min_score())
     return [to_search_result(doc) for doc in retriever.invoke(query)]
 
 

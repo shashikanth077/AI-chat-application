@@ -89,3 +89,13 @@
 5. Why not trust X-Forwarded-For for rate limiting, and what are the limits of this rate limiter?
 6. How did you enforce a request-size limit including bodies sent without a Content-Length, and what went wrong?
 7. What do guardrails not protect against, and what would you add next?
+
+## Phase 17
+1. Why would you put a vector database such as Qdrant in front of document search, and when is brute force over SQLite enough?
+2. SQLite and Qdrant both hold vectors here. Which one is the source of truth, and what happens to consistency when an upload or a delete fails halfway?
+3. Why does search ignore points whose document no longer exists, and why not just delete them synchronously? What does `prune` do?
+4. Why one Qdrant collection per embedding model, and what goes wrong if vectors from two models are compared?
+5. How do LangChain retrievers and vector stores fit together, and what does a caller gain by depending on `BaseRetriever`?
+6. A reindex must not re-embed documents. How does the app achieve that, and why does it matter for cost and for consistency?
+7. What did you test in-memory, and what could only be verified against a real server? How would you test Qdrant's failure modes (outage, timeouts, partial writes)?
+
